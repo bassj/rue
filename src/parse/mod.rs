@@ -1,6 +1,52 @@
 use nom::IResult;
 
-pub mod types;
+mod types;
+
+pub use types::Expression;
+pub use types::Operator;
+
+use nom::error::ParseError;
+use nom::Parser;
+
+fn ws<'p, O, E: ParseError<&'p [u8]>, F>(f: F) -> impl FnMut(&'p [u8]) -> IResult<&'p [u8], O, E>
+where
+    F: Parser<&'p [u8], O, E>,
+{
+    nom::sequence::delimited(
+        nom::character::complete::multispace0,
+        f,
+        nom::character::complete::multispace0,
+    )
+}
+
+#[test]
+fn test_ws() {
+    let parser = build_operator_parser(None);
+
+    let (input, operator) = parser(b"    -").unwrap();
+    assert_eq!(input, b"", "Parser returned correct input string");
+    assert_eq!(
+        operator,
+        types::Operator::Subtract,
+        "Parser returned correct operator type"
+    );
+
+    let (input, operator) = parser(b"    -     ").unwrap();
+    assert_eq!(input, b"", "Parser returned correct input string");
+    assert_eq!(
+        operator,
+        types::Operator::Subtract,
+        "Parser returned correct operator type"
+    );
+
+    let (input, operator) = parser(b"       -         ").unwrap();
+    assert_eq!(input, b"", "Parser returned correct input string");
+    assert_eq!(
+        operator,
+        types::Operator::Subtract,
+        "Parser returned correct operator type"
+    );
+}
 
 /// The main entry point for parsing a rue program
 pub fn parse_source(input: &str) -> types::Expression {
@@ -15,7 +61,7 @@ fn parse_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
 
 #[test]
 fn test_parse_expression_nested_expression() {
-    let (input, expr) = parse_binary_operation(b"(100+201)").unwrap();
+    let (input, expr) = parse_binary_operation(b"( 100 + 201 )").unwrap();
     assert_eq!(
         expr,
         types::Expression::BinaryOperation(
@@ -26,7 +72,7 @@ fn test_parse_expression_nested_expression() {
     );
     assert_eq!(input, b"");
 
-    let (input, expr) = parse_binary_operation(b"10*(100+201)").unwrap();
+    let (input, expr) = parse_binary_operation(b"10 * (100 + 201)").unwrap();
     assert_eq!(
         expr,
         types::Expression::BinaryOperation(
@@ -43,11 +89,11 @@ fn test_parse_expression_nested_expression() {
 }
 
 fn parse_nested_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
-    nom::sequence::delimited(
+    ws(nom::sequence::delimited(
         nom::character::complete::char('('),
         parse_expression,
         nom::character::complete::char(')'),
-    )(input)
+    ))(input)
 }
 
 fn parse_binary_operation(input: &[u8]) -> IResult<&[u8], types::Expression> {
@@ -185,16 +231,18 @@ fn build_operator_parser(
         None => types::Operator::tokens(),
     };
 
-    move |input| {
-        nom::combinator::map_res(
+    move |input: &[u8]| {
+        let res = ws(nom::combinator::map_res(
             nom::character::complete::one_of(operator_tokens.as_str()),
             |c: char| c.try_into() as Result<types::Operator, ()>,
-        )(input)
+        ))(input);
+
+        res
     }
 }
 
 #[test]
-fn test_build_operator_parser() {
+fn test_parse_operator() {
     let addition_parser = build_operator_parser(Some(&vec![types::Operator::Add]));
 
     let (input, operator) = addition_parser(b"+").unwrap();
@@ -233,7 +281,7 @@ fn test_build_operator_parser() {
 
 fn parse_integer_literal(input: &[u8]) -> IResult<&[u8], types::Expression> {
     nom::combinator::map_res(
-        nom::bytes::complete::take_while(nom::character::is_digit),
+        ws(nom::bytes::complete::take_while(nom::character::is_digit)),
         |value: &[u8]| -> Result<types::Expression, Box<dyn std::error::Error>> {
             let value = std::str::from_utf8(value)?.to_string();
             let value = value.parse::<i64>()?;
@@ -266,7 +314,7 @@ fn test_parse_integer_literal() {
         types::Expression::IntegerLiteral(100),
         "Integer literal was correctly parsed"
     );
-    assert_eq!(input, b" 200", "Integer literal was removed from input");
+    assert_eq!(input, b"200", "Integer literal was removed from input");
 
     let res = parse_integer_literal(b"not an int");
     assert!(res.is_err(), "Trying to parse non-operator causes error");
