@@ -15,28 +15,42 @@ fn parse_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
 
 #[test]
 fn test_parse_expression_nested_expression() {
-    // let (input, expr) = parse_binary_operation(b"(100+201)").unwrap();
-    // assert_eq!(
-    //     expr,
-    //     types::Expression::BinaryOperation(
-    //         types::Operator::Add,
-    //         Box::new(types::Expression::IntegerLiteral(100)),
-    //         Box::new(types::Expression::IntegerLiteral(201))
-    //     )
-    // );
-    // assert_eq!(input, b"");
+    let (input, expr) = parse_binary_operation(b"(100+201)").unwrap();
+    assert_eq!(
+        expr,
+        types::Expression::BinaryOperation(
+            types::Operator::Add,
+            Box::new(types::Expression::IntegerLiteral(100)),
+            Box::new(types::Expression::IntegerLiteral(201))
+        )
+    );
+    assert_eq!(input, b"");
+
+    let (input, expr) = parse_binary_operation(b"10*(100+201)").unwrap();
+    assert_eq!(
+        expr,
+        types::Expression::BinaryOperation(
+            types::Operator::Multiply,
+            Box::new(types::Expression::IntegerLiteral(10)),
+            Box::new(types::Expression::BinaryOperation(
+                types::Operator::Add,
+                Box::new(types::Expression::IntegerLiteral(100)),
+                Box::new(types::Expression::IntegerLiteral(201))
+            )),
+        ),
+    );
+    assert_eq!(input, b"");
 }
 
-// fn parse_nested_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
-//     nom::sequence::delimited(
-//         nom::character::complete::char('('),
-//         parse_expression,
-//         nom::character::complete::char(')'),
-//     )(input)
-// }
+fn parse_nested_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
+    nom::sequence::delimited(
+        nom::character::complete::char('('),
+        parse_expression,
+        nom::character::complete::char(')'),
+    )(input)
+}
 
 fn parse_binary_operation(input: &[u8]) -> IResult<&[u8], types::Expression> {
-
     fn _build_binary_operation_parser<'p>(
         precedence_level: usize,
         precedence_levels: &'static Vec<Vec<types::Operator>>,
@@ -54,7 +68,7 @@ fn parse_binary_operation(input: &[u8]) -> IResult<&[u8], types::Expression> {
                 if precedence_level < num_precedence_levels {
                     _build_binary_operation_parser(precedence_level + 1, precedence_levels)(input)
                 } else {
-                    parse_integer_literal(input)
+                    nom::branch::alt((parse_integer_literal, parse_nested_expression))(input)
                 }
             };
 
@@ -62,12 +76,10 @@ fn parse_binary_operation(input: &[u8]) -> IResult<&[u8], types::Expression> {
                 return next_level(input);
             }
 
-            let parse_op_chain = nom::multi::many0(
-                nom::sequence::tuple((
-                    build_operator_parser(operators.as_ref()),
-                    next_level,
-                ))
-            );
+            let parse_op_chain = nom::multi::many0(nom::sequence::tuple((
+                build_operator_parser(operators.as_ref()),
+                next_level,
+            )));
 
             let res = nom::combinator::map(
                 nom::sequence::tuple((next_level, parse_op_chain)),
@@ -77,8 +89,11 @@ fn parse_binary_operation(input: &[u8]) -> IResult<&[u8], types::Expression> {
                     } else {
                         for (op, rhs) in op_chain {
                             let _lhs = std::mem::take(&mut lhs);
-                            let mut expr =
-                                types::Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
+                            let mut expr = types::Expression::BinaryOperation(
+                                op,
+                                Box::new(_lhs),
+                                Box::new(rhs),
+                            );
                             std::mem::swap(&mut lhs, &mut expr);
                         }
 

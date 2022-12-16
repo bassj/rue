@@ -7,7 +7,6 @@ use phf::phf_map;
 pub enum Expression {
     IntegerLiteral(i64),
     BinaryOperation(Operator, Box<Expression>, Box<Expression>),
-    NestedExpression(Box<Expression>),
     NoOp
 }
 
