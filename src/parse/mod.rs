@@ -3,7 +3,7 @@ use nom::IResult;
 pub mod types;
 
 /// The main entry point for parsing a rue program
-pub fn parse_source(input: &str) -> types::Node {
+pub fn parse_source(input: &str) -> types::Expression {
     let (_, expr) = parse_expression(input.as_bytes()).expect("Error parsing input");
     expr
 }
@@ -27,71 +27,71 @@ fn test_parse_expression_nested_expression() {
     // assert_eq!(input, b"");
 }
 
-fn parse_nested_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
-    nom::sequence::delimited(
-        nom::character::complete::char('('),
-        parse_expression,
-        nom::character::complete::char(')'),
-    )(input)
-}
-
-fn _build_binary_operation_parser<'p>(
-    precedence_level: usize,
-    precedence_levels: &'static Vec<Vec<types::Operator>>,
-) -> impl Fn(&[u8]) -> IResult<&[u8], types::Expression> + 'p {
-    let num_precedence_levels = precedence_levels.len();
-
-    move |input: &[u8]| -> IResult<&[u8], types::Expression> {
-        let (next_level, operators): (
-            Box<dyn Fn(&[u8]) -> IResult<&[u8], types::Expression>>,
-            Option<Vec<types::Operator>>,
-        ) = if precedence_level < num_precedence_levels {
-            let operators = precedence_levels[precedence_level].clone();
-            (
-                Box::new(_build_binary_operation_parser(
-                    precedence_level + 1,
-                    precedence_levels,
-                )),
-                Some(operators),
-            )
-        } else {
-            (Box::new(parse_integer_literal), None)
-        };
-
-        if operators.is_none() {
-            return next_level(input);
-        }
-
-        let parse_op_chain = nom::multi::many0(nom::sequence::tuple((
-            build_operator_parser(operators.as_ref()),
-            next_level.as_ref(),
-        )));
-
-        let res = nom::combinator::map(
-            nom::sequence::tuple((next_level.as_ref(), parse_op_chain)),
-            move |(mut lhs, op_chain)| {
-                if op_chain.len() == 0 {
-                    lhs
-                } else {
-                    for (op, rhs) in op_chain {
-                        let _lhs = std::mem::take(&mut lhs);
-                        let mut expr =
-                            types::Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
-                        std::mem::swap(&mut lhs, &mut expr);
-                    }
-
-                    lhs
-                }
-            },
-        )(input);
-
-        res
-    }
-}
+// fn parse_nested_expression(input: &[u8]) -> IResult<&[u8], types::Expression> {
+//     nom::sequence::delimited(
+//         nom::character::complete::char('('),
+//         parse_expression,
+//         nom::character::complete::char(')'),
+//     )(input)
+// }
 
 fn parse_binary_operation(input: &[u8]) -> IResult<&[u8], types::Expression> {
-    let precedence_levels = types::Operator::precedence_levels();
 
+    fn _build_binary_operation_parser<'p>(
+        precedence_level: usize,
+        precedence_levels: &'static Vec<Vec<types::Operator>>,
+    ) -> impl Fn(&'p [u8]) -> IResult<&'p [u8], types::Expression> + 'p {
+        let num_precedence_levels = precedence_levels.len();
+
+        move |input: &'p [u8]| -> IResult<&'p [u8], types::Expression> {
+            let operators = if precedence_level < num_precedence_levels {
+                Some(precedence_levels[precedence_level].clone())
+            } else {
+                None
+            };
+
+            let next_level = |input: &'p [u8]| {
+                if precedence_level < num_precedence_levels {
+                    _build_binary_operation_parser(precedence_level + 1, precedence_levels)(input)
+                } else {
+                    parse_integer_literal(input)
+                }
+            };
+
+            if operators.is_none() {
+                return next_level(input);
+            }
+
+            let parse_op_chain = nom::multi::many0(
+                nom::sequence::tuple((
+                    build_operator_parser(operators.as_ref()),
+                    next_level,
+                ))
+            );
+
+            let res = nom::combinator::map(
+                nom::sequence::tuple((next_level, parse_op_chain)),
+                move |(mut lhs, op_chain)| {
+                    if op_chain.len() == 0 {
+                        lhs
+                    } else {
+                        for (op, rhs) in op_chain {
+                            let _lhs = std::mem::take(&mut lhs);
+                            let mut expr =
+                                types::Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
+                            std::mem::swap(&mut lhs, &mut expr);
+                        }
+
+                        lhs
+                    }
+                },
+            )(input);
+
+            res
+        }
+    }
+
+    let precedence_levels = types::Operator::precedence_levels();
     _build_binary_operation_parser(0, precedence_levels)(input)
 }
 

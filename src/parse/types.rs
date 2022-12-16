@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use lazy_static::lazy_static;
 use phf::phf_map;
 
-pub type Node = Expression;
-
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     IntegerLiteral(i64),
