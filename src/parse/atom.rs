@@ -1,41 +1,49 @@
 //! Handles parsing of all "atoms".
 //! An atom is a leaf node of our abstract syntax tree.
 
-use crate::ast::{
-    Expression,
-    Operator
-};
+use nom::AsChar;
 
-use super::{
-    IResult,
-    util
-};
+use crate::ast::{Expression, Operator};
+
+use super::{util, IResult, InputType};
 
 /// Constructrs a closure that can be used to parse operators out of our input stream.
 pub fn build_operator_parser(
-    operators: Option<&Vec<Operator>>,
-) -> impl Fn(&[u8]) -> IResult<Operator> {
-    let operator_tokens = match operators {
-        Some(operators) => operators
-            .into_iter()
-            .map(|op| op.get_token())
-            .collect::<String>(),
-        None => Operator::tokens(),
-    };
+    operators: Option<&[Operator]>,
+) -> impl Fn(InputType) -> IResult<Operator> {
+    let operators: Option<String> =
+        operators.map(|o| o.into_iter().map(|op| -> char { op.into() }).collect());
 
-    move |input: &[u8]| {
-        let res = util::ws(nom::combinator::map_res(
-            nom::character::complete::one_of(operator_tokens.as_str()),
-            |c: char| c.try_into() as Result<Operator, ()>,
-        ))(input);
+    fn parse_any_operator(input: InputType) -> IResult<Operator> {
+        Operator::try_from(input[0].as_char())
+            .map(|op| (&input[1..], op))
+            .map_err(|_err| {
+                nom::Err::Error(nom::error::VerboseError {
+                    errors: vec![(
+                        input,
+                        nom::error::VerboseErrorKind::Nom(nom::error::ErrorKind::OneOf),
+                    )],
+                })
+            })
+    }
 
-        res
+    move |input: InputType| {
+        match &operators {
+            Some(ops) => {
+                util::ws(nom::combinator::map(
+                    nom::character::complete::one_of(ops.as_str()),
+                    |c: char| Operator::try_from(c).unwrap(),
+                    // This shouldn't fail, since the parser can only match valid characters
+                ))(input)
+            }
+            _ => util::ws(parse_any_operator)(input),
+        }
     }
 }
 
 #[test]
 fn test_parse_operator() {
-    let addition_parser = build_operator_parser(Some(&vec![Operator::Add]));
+    let addition_parser = build_operator_parser(Some(&[Operator::Add]));
 
     let (input, operator) = addition_parser(b"+").unwrap();
     assert_eq!(input, b"", "Parser returned correct input string");
@@ -52,7 +60,7 @@ fn test_parse_operator() {
     );
 
     let addition_subtraction_parser =
-        build_operator_parser(Some(&vec![Operator::Add, Operator::Subtract]));
+        build_operator_parser(Some(&[Operator::Add, Operator::Subtract]));
 
     let (input, operator) = addition_parser(b"+").unwrap();
     assert_eq!(input, b"", "Parser returned correct input string");

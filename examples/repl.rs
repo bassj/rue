@@ -35,7 +35,7 @@ fn main() -> io::Result<()> {
             break
         }
 
-        let ast = rue::parse::parse_source(line);
+        let ast = rue::parse::parse_source(line).unwrap();
         println!("{}", evaulate_expression(ast));
     }
 

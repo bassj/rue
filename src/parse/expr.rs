@@ -44,7 +44,7 @@ fn test_parse_nested_expression() {
 fn parse_binary_operation_or_term(input: &[u8]) -> IResult<Expression> {
     fn _build_binary_operation_parser<'p>(
         precedence_level: usize,
-        precedence_levels: &'static Vec<Vec<Operator>>,
+        precedence_levels: &'static [&'static [Operator]],
     ) -> impl Fn(&'p [u8]) -> IResult<'p, Expression> + 'p {
         let num_precedence_levels = precedence_levels.len();
 
@@ -68,7 +68,7 @@ fn parse_binary_operation_or_term(input: &[u8]) -> IResult<Expression> {
             }
 
             let parse_op_chain = nom::multi::many0(nom::sequence::tuple((
-                atom::build_operator_parser(operators.as_ref()),
+                atom::build_operator_parser(operators),
                 next_level,
             )));
 
