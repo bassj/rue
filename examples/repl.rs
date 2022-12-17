@@ -3,11 +3,10 @@ use std::io::Write;
 use {
     std::io,
     rue,
-    rue::parse::Expression,
-    rue::parse::Operator,
+    rue::ast::*,
 };
 
-fn evaulate_expression(expr: rue::parse::Expression) -> i64 {
+fn evaulate_expression(expr: Expression) -> i64 {
     match expr {
         Expression::IntegerLiteral(i) => i,
         Expression::NoOp => 0,
@@ -25,6 +24,7 @@ fn evaulate_expression(expr: rue::parse::Expression) -> i64 {
 }
 
 fn main() -> io::Result<()> {
+    println!("Welcome to the thunderdome!");
     loop {
         print!(">");
         io::stdout().flush()?;
@@ -35,7 +35,7 @@ fn main() -> io::Result<()> {
             break
         }
 
-        let ast = rue::parse::parse_source(&line);
+        let ast = rue::parse::parse_source(line);
         println!("{}", evaulate_expression(ast));
     }
 
