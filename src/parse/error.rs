@@ -50,6 +50,105 @@ impl<'s> ParseError<'s> {
             &ParseError::Stack { root, context: _ } => root.location(),
         }
     }
+
+    pub fn error_message(&self) -> impl std::fmt::Display {
+        let root_err = match self {
+            ParseError::Stack { root, context: _ } => root.as_ref(),
+            e => e,
+        };
+
+        match root_err {
+            ParseError::Root { location: _, kind } => match kind {
+                ErrorContext::Expectation { expected } => format!("expected {}", expected),
+                _ => unimplemented!(),
+            },
+            _ => panic!("root error should not be anything except ParseError::Root"),
+        }
+    }
+
+    pub fn error_message_long(&self) -> impl std::fmt::Display {
+        let short_msg = self.error_message();
+
+        let root_err = match self {
+            ParseError::Stack { root, context: _ } => root.as_ref(),
+            e => e,
+        };
+
+        match root_err {
+            ParseError::Root { location, kind } => match kind {
+                ErrorContext::Expectation { expected: _ } => {
+                    let found = match location.fragment().chars().next() {
+                        Some(c) => format!("`{}`", c),
+                        _ => "``".to_string(),
+                    };
+                    format!("{}, found {}", short_msg, found)
+                }
+                _ => short_msg.to_string(),
+            },
+            _ => panic!("root error should not be anything except ParseError::Root"),
+        }
+    }
+
+    pub fn error_header(&self) -> impl std::fmt::Display {
+        format!("{}: {}", "error".red(), self.error_message_long())
+            .bold()
+            .white()
+    }
+
+    pub fn code_highlight(&self) -> String {
+        let short_msg = self.error_message();
+
+        let root_err = match self {
+            ParseError::Stack { root, context: _ } => root.as_ref(),
+            e => e,
+        };
+
+        match root_err {
+            ParseError::Root { location, kind: _ } => {
+                let line_number = location.location_line().to_string();
+                let width = line_number.len() + 1;
+                let empty_header = format!("{:w$}|", "", w = width).bold().bright_cyan();
+                let line_header = format!("{:w$}|", line_number, w = width)
+                    .bold()
+                    .bright_cyan();
+                let newline = "\r\n";
+
+                let code = std::str::from_utf8(location.get_line_beginning())
+                    .expect("Source must be utf8 encoded");
+                let code = format!("\t{}", code);
+
+                let offset = location.get_utf8_column();
+                let error_highlight = format!("\t{:>offset$} {}", "^", short_msg, offset = offset)
+                    .bold()
+                    .red();
+
+                format!(
+                    "{}{}{}{}{}{}{}",
+                    empty_header,
+                    newline,
+                    line_header,
+                    code,
+                    newline,
+                    empty_header,
+                    error_highlight
+                )
+            }
+            _ => panic!("root error should not be anything except ParseError::Root"),
+        }
+    }
+}
+
+impl std::fmt::Display for ParseError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let newline = "\r\n";
+        write!(
+            f,
+            "{}{}{}",
+            self.error_header(),
+            newline,
+            self.code_highlight()
+        )
+    }
 }
 
 impl<'s> nom::error::ParseError<InputType<'s>> for ParseError<'s> {
@@ -120,54 +219,6 @@ impl<'s> Default for ParseError<'s> {
             location: LocatedSpan::new(""),
             kind: ErrorContext::Kind(nom::error::ErrorKind::Fail),
         }
-    }
-}
-
-pub fn convert_error(err: ParseError) -> String {
-    match err {
-        ParseError::Stack { root, context: _ } => match root.as_ref() {
-            ParseError::Root { location, kind } => {
-                let expectation = match kind {
-                    ErrorContext::Expectation { expected } => format!("expected {}", expected),
-                    ErrorContext::Kind(_) => todo!(),
-                    ErrorContext::Context(_) => todo!(),
-                };
-
-                let found = {
-                    let val = match location.fragment().chars().next() {
-                        Some(c) => format!("`{}`", c),
-                        _ => "``".to_string(),
-                    };
-
-                    format!("found {}", val)
-                };
-
-                let error_message = format!("{}, {}", expectation, found);
-
-                let error_line = format!("{}{}{}", "error".red(), ": ".white(), error_message.white()).bold();
-
-                let code_sample = {
-                    let line_number = location.location_line();
-                    let line_number = format!("{} |", line_number).bold().bright_blue();
-                    println!("{}", std::str::from_utf8(location.as_bytes()).unwrap());
-                    let location_str = std::str::from_utf8(location.get_line_beginning())
-                        .expect("Rue can only parse valid utf8");
-                    format!("{}\t{}", line_number, location_str)
-                };
-
-                let error_highlight = {
-                    let offset = location.get_utf8_column();
-                    format!("\t{:>offset$} {}", "^", expectation, offset = offset)
-                };
-
-                format!(
-                    "{}\r\n{}\r\n{}",
-                    error_line, code_sample, error_highlight.red().bold()
-                )
-            }
-            _ => panic!("Stack root should always be of type ParseError::Root"),
-        },
-        _ => String::new(),
     }
 }
 

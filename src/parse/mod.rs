@@ -36,17 +36,16 @@ pub fn parse_source<'s, T: Into<&'s str>>(input: T) -> Result<ast::Expression, P
 
 #[test]
 fn test_parse_source_error() {
-    // let input = "asdf";
-    // let result = parse_source(input);
+    let input = "asdf";
+    let result = parse_source(input);
 
-    // assert!(result.is_err(), "Result of parsing 'asdf' is an error.");
+    assert!(result.is_err(), "Result of parsing 'asdf' is an error.");
 
     let input = "100 + ";
     let result = parse_source(input);
     assert!(result.is_err(), "Result of parsing '100 + ' is an error.");
     let err = result.unwrap_err();
-    println!("{:#?}", err);
-    println!("{}", error::convert_error(err));
+    println!("{}", err);
     // assert_eq!(
     //     format!("{:#?}", err),
     //     "ASDF",
