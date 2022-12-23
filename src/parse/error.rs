@@ -1,6 +1,8 @@
 use nom::{Err, IResult};
 use nom_locate::LocatedSpan;
 
+use colored::Colorize;
+
 use super::InputType;
 
 pub trait Expectable {
@@ -131,21 +133,37 @@ pub fn convert_error(err: ParseError) -> String {
                     ErrorContext::Context(_) => todo!(),
                 };
 
-                let found = location.fragment().chars().next();
-                let found = format!("`{}`", if found.is_none() { 0 as char } else { found.unwrap() });
+                let found = {
+                    let val = match location.fragment().chars().next() {
+                        Some(c) => format!("`{}`", c),
+                        _ => "``".to_string(),
+                    };
 
-                let line_number = location.location_line();
-                let column_number = location.get_utf8_column();
+                    format!("found {}", val)
+                };
 
-                let line_number = format!("{} |", line_number);
+                let error_message = format!("{}, {}", expectation, found);
 
-                let location = std::str::from_utf8(location.get_line_beginning())
-                    .expect("Rue can only parse valid utf8");
+                let error_line = format!("{}{}{}", "error".red(), ": ".white(), error_message.white()).bold();
 
-                let location = format!("{}\t{}", line_number, location);
-                let location = format!("{}\r\n\t{:>offset$} {}", location, "^", expectation, offset = column_number);
+                let code_sample = {
+                    let line_number = location.location_line();
+                    let line_number = format!("{} |", line_number).bold().bright_blue();
+                    println!("{}", std::str::from_utf8(location.as_bytes()).unwrap());
+                    let location_str = std::str::from_utf8(location.get_line_beginning())
+                        .expect("Rue can only parse valid utf8");
+                    format!("{}\t{}", line_number, location_str)
+                };
 
-                format!("error: {}, found: {}\n{}", expectation, found, location)
+                let error_highlight = {
+                    let offset = location.get_utf8_column();
+                    format!("\t{:>offset$} {}", "^", expectation, offset = offset)
+                };
+
+                format!(
+                    "{}\r\n{}\r\n{}",
+                    error_line, code_sample, error_highlight.red().bold()
+                )
             }
             _ => panic!("Stack root should always be of type ParseError::Root"),
         },
