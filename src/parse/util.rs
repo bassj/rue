@@ -1,8 +1,4 @@
-use nom::{
-    error::ParseError,
-    IResult, Parser
-};
-
+use nom::{error::ParseError, IResult, Parser};
 
 pub fn ws<'p, O, E: ParseError<&'p [u8]>, F>(
     f: F,

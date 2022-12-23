@@ -1,6 +1,8 @@
 //! Handles all parsing of expressions.
 //! An expression is essentially any piece of code returning a value.
 
+use nom::Parser;
+
 use super::{atom, util, IResult};
 
 use crate::ast::*;
@@ -67,27 +69,29 @@ fn parse_binary_operation_or_term(input: &[u8]) -> IResult<Expression> {
                 return next_level(input);
             }
 
-            let parse_op_chain = nom::multi::many0(nom::sequence::tuple((
-                atom::build_operator_parser(operators),
-                next_level,
-            )));
+            let parse_op_chain = nom::multi::many0(
+                atom::build_operator_parser(operators).and(super::error::expect(next_level)),
+            );
 
-            let res = nom::combinator::map(
-                nom::sequence::tuple((next_level, parse_op_chain)),
-                move |(mut lhs, op_chain)| {
-                    if op_chain.len() == 0 {
-                        lhs
-                    } else {
-                        for (op, rhs) in op_chain {
-                            let _lhs = std::mem::take(&mut lhs);
-                            let mut expr =
-                                Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
-                            std::mem::swap(&mut lhs, &mut expr);
+            let res = nom::error::context(
+                "parsing expression",
+                nom::combinator::map(
+                    nom::sequence::tuple((next_level, parse_op_chain)),
+                    move |(mut lhs, op_chain)| {
+                        if op_chain.len() == 0 {
+                            lhs
+                        } else {
+                            for (op, rhs) in op_chain {
+                                let _lhs = std::mem::take(&mut lhs);
+                                let mut expr =
+                                    Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
+                                std::mem::swap(&mut lhs, &mut expr);
+                            }
+
+                            lhs
                         }
-
-                        lhs
-                    }
-                },
+                    },
+                ),
             )(input);
 
             res

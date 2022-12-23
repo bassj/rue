@@ -17,14 +17,7 @@ pub fn build_operator_parser(
     fn parse_any_operator(input: InputType) -> IResult<Operator> {
         Operator::try_from(input[0].as_char())
             .map(|op| (&input[1..], op))
-            .map_err(|_err| {
-                nom::Err::Error(nom::error::VerboseError {
-                    errors: vec![(
-                        input,
-                        nom::error::VerboseErrorKind::Nom(nom::error::ErrorKind::OneOf),
-                    )],
-                })
-            })
+            .map_err(|_| nom::Err::Error(super::error::ParseError::default()))
     }
 
     move |input: InputType| {
