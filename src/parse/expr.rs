@@ -3,7 +3,7 @@
 
 use nom::Parser;
 
-use super::{atom, util, IResult};
+use super::{atom, util, IResult, InputType};
 
 use crate::ast::*;
 
@@ -12,11 +12,11 @@ use crate::ast::*;
 ///
 /// Where an expression take the following form:
 /// expr => binop | term
-pub fn parse_expression(input: &[u8]) -> IResult<Expression> {
+pub fn parse_expression(input: InputType) -> IResult<Expression> {
     parse_binary_operation_or_term(input)
 }
 
-fn parse_nested_expression(input: &[u8]) -> IResult<Expression> {
+fn parse_nested_expression(input: InputType) -> IResult<Expression> {
     util::ws(nom::sequence::delimited(
         nom::character::complete::char('('),
         parse_expression,
@@ -26,7 +26,9 @@ fn parse_nested_expression(input: &[u8]) -> IResult<Expression> {
 
 #[test]
 fn test_parse_nested_expression() {
-    let (input, expr) = parse_nested_expression(b"( 100 + 201 )").unwrap();
+    use nom_locate::LocatedSpan;
+
+    let (input, expr) = parse_nested_expression(LocatedSpan::new("( 100 + 201 )")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -35,7 +37,7 @@ fn test_parse_nested_expression() {
             Box::new(Expression::IntegerLiteral(201))
         )
     );
-    assert_eq!(input, b"");
+    assert_eq!(input.fragment(), &"");
 }
 
 /// Attempts to parse either a binary operation or single term from the input.
@@ -43,21 +45,21 @@ fn test_parse_nested_expression() {
 /// A binary operation looks like so:
 /// binop => term op term
 /// term => literal | ( expr )
-fn parse_binary_operation_or_term(input: &[u8]) -> IResult<Expression> {
+fn parse_binary_operation_or_term(input: InputType) -> IResult<Expression> {
     fn _build_binary_operation_parser<'p>(
         precedence_level: usize,
         precedence_levels: &'static [&'static [Operator]],
-    ) -> impl Fn(&'p [u8]) -> IResult<'p, Expression> + 'p {
+    ) -> impl Fn(InputType<'p>) -> IResult<'p, Expression> + 'p {
         let num_precedence_levels = precedence_levels.len();
 
-        move |input: &'p [u8]| -> IResult<'p, Expression> {
+        move |input: InputType<'p>| -> IResult<'p, Expression> {
             let operators = if precedence_level < num_precedence_levels {
                 Some(precedence_levels[precedence_level].clone())
             } else {
                 None
             };
 
-            let next_level = |input: &'p [u8]| {
+            let next_level = |input: InputType<'p>| {
                 if precedence_level < num_precedence_levels {
                     _build_binary_operation_parser(precedence_level + 1, precedence_levels)(input)
                 } else {
@@ -104,8 +106,10 @@ fn parse_binary_operation_or_term(input: &[u8]) -> IResult<Expression> {
 
 #[test]
 fn test_parse_binary_operation() {
+    use nom_locate::LocatedSpan;
+
     // Test parsing simple addition
-    let (input, expr) = parse_binary_operation_or_term(b"100+201").unwrap();
+    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100+201")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -114,9 +118,9 @@ fn test_parse_binary_operation() {
             Box::new(Expression::IntegerLiteral(201))
         )
     );
-    assert_eq!(input, b"");
+    assert_eq!(input.fragment(), &"");
     // Test with three terms
-    let (input, expr) = parse_binary_operation_or_term(b"100+200+300").unwrap();
+    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100+200+300")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -129,9 +133,9 @@ fn test_parse_binary_operation() {
             Box::new(Expression::IntegerLiteral(300)),
         )
     );
-    assert_eq!(input, b"");
+    assert_eq!(input.fragment(), &"");
     // Test order of operations, with operators of the same precedence.
-    let (input, expr) = parse_binary_operation_or_term(b"100-101+200").unwrap();
+    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100-101+200")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -144,9 +148,9 @@ fn test_parse_binary_operation() {
             Box::new(Expression::IntegerLiteral(200)),
         )
     );
-    assert_eq!(input, b"");
+    assert_eq!(input.fragment(), &"");
     // Test order of operations with operators of different precedence
-    let (input, expr) = parse_binary_operation_or_term(b"100/2+300/4").unwrap();
+    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100/2+300/4")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -163,9 +167,9 @@ fn test_parse_binary_operation() {
             ))
         )
     );
-    assert_eq!(input, b"");
+    assert_eq!(input.fragment(), &"");
 
-    let (input, expr) = parse_binary_operation_or_term(b"10 * (100 + 201)").unwrap();
+    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("10 * (100 + 201)")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -178,5 +182,5 @@ fn test_parse_binary_operation() {
             )),
         ),
     );
-    assert_eq!(input, b"");
+    assert_eq!(input.fragment(), &"");
 }

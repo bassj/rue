@@ -1,10 +1,11 @@
+use super::InputType;
 use nom::{error::ParseError, IResult, Parser};
 
-pub fn ws<'p, O, E: ParseError<&'p [u8]>, F>(
+pub fn ws<'p, O, E: ParseError<InputType<'p>>, F>(
     f: F,
-) -> impl FnMut(&'p [u8]) -> IResult<&'p [u8], O, E>
+) -> impl FnMut(InputType<'p>) -> IResult<InputType<'p>, O, E>
 where
-    F: Parser<&'p [u8], O, E>,
+    F: Parser<InputType<'p>, O, E>,
 {
     nom::sequence::delimited(
         nom::character::complete::multispace0,
@@ -15,28 +16,29 @@ where
 
 #[test]
 fn test_ws() {
+    use nom_locate::LocatedSpan;
     use crate::ast::Operator;
 
     let parser = super::atom::build_operator_parser(None);
 
-    let (input, operator) = parser(b"    -").unwrap();
-    assert_eq!(input, b"", "Parser returned correct input string");
+    let (input, operator) = parser(LocatedSpan::new("    -")).unwrap();
+    assert_eq!(input.fragment(), &"", "Parser returned correct input string");
     assert_eq!(
         operator,
         Operator::Subtract,
         "Parser returned correct operator type"
     );
 
-    let (input, operator) = parser(b"    -     ").unwrap();
-    assert_eq!(input, b"", "Parser returned correct input string");
+    let (input, operator) = parser(LocatedSpan::new("    -     ")).unwrap();
+    assert_eq!(input.fragment(), &"", "Parser returned correct input string");
     assert_eq!(
         operator,
         Operator::Subtract,
         "Parser returned correct operator type"
     );
 
-    let (input, operator) = parser(b"       -         ").unwrap();
-    assert_eq!(input, b"", "Parser returned correct input string");
+    let (input, operator) = parser(LocatedSpan::new("       -         ")).unwrap();
+    assert_eq!(input.fragment(), &"", "Parser returned correct input string");
     assert_eq!(
         operator,
         Operator::Subtract,

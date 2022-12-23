@@ -1,4 +1,5 @@
 use nom::{Err, IResult};
+use nom_locate::LocatedSpan;
 
 use super::InputType;
 
@@ -23,7 +24,7 @@ impl std::fmt::Display for Expectation {
 
 #[derive(Debug)]
 pub enum ErrorContext {
-    Expectation(Expectation),
+    Expectation { expected: Expectation },
     Kind(nom::error::ErrorKind),
     Context(&'static str),
 }
@@ -31,28 +32,26 @@ pub enum ErrorContext {
 #[derive(Debug)]
 pub enum ParseError<'s> {
     Root {
-        location: &'s str,
+        location: InputType<'s>,
         kind: ErrorContext,
     },
     Stack {
         root: Box<Self>,
-        context: Vec<(&'s str, ErrorContext)>,
+        context: Vec<(InputType<'s>, ErrorContext)>,
     },
 }
 
 impl<'s> ParseError<'s> {
-    pub fn location(&self) -> &'s str {
+    pub fn location(&self) -> &InputType<'s> {
         match &self {
-            &ParseError::Root { location, kind } => location,
-            &ParseError::Stack { root, context } => root.location(),
+            &ParseError::Root { location, kind: _ } => location,
+            &ParseError::Stack { root, context: _ } => root.location(),
         }
     }
 }
 
 impl<'s> nom::error::ParseError<InputType<'s>> for ParseError<'s> {
     fn from_error_kind(input: InputType<'s>, kind: nom::error::ErrorKind) -> Self {
-        let input = std::str::from_utf8(input).unwrap();
-
         Self::Root {
             location: input,
             kind: ErrorContext::Kind(kind),
@@ -60,8 +59,6 @@ impl<'s> nom::error::ParseError<InputType<'s>> for ParseError<'s> {
     }
 
     fn append(input: InputType<'s>, kind: nom::error::ErrorKind, other: Self) -> Self {
-        let input = std::str::from_utf8(input).unwrap();
-
         let ctx = (input, ErrorContext::Kind(kind));
 
         match other {
@@ -81,9 +78,7 @@ impl<'s> nom::error::ParseError<InputType<'s>> for ParseError<'s> {
 }
 
 impl<'s> nom::error::ContextError<InputType<'s>> for ParseError<'s> {
-    fn add_context(input: InputType<'s>, ctx: &'static str, mut other: Self) -> Self {
-        let input = std::str::from_utf8(input).unwrap();
-
+    fn add_context(input: InputType<'s>, ctx: &'static str, other: Self) -> Self {
         let ctx = (input, ErrorContext::Context(ctx));
 
         match other {
@@ -108,9 +103,8 @@ impl<'s> nom::error::FromExternalError<InputType<'s>, Box<dyn std::error::Error>
     fn from_external_error(
         input: InputType<'s>,
         kind: nom::error::ErrorKind,
-        e: Box<dyn std::error::Error>,
+        _e: Box<dyn std::error::Error>,
     ) -> Self {
-        let input = std::str::from_utf8(input).unwrap();
         Self::Root {
             location: input,
             kind: ErrorContext::Kind(kind),
@@ -121,14 +115,42 @@ impl<'s> nom::error::FromExternalError<InputType<'s>, Box<dyn std::error::Error>
 impl<'s> Default for ParseError<'s> {
     fn default() -> Self {
         Self::Root {
-            location: "",
+            location: LocatedSpan::new(""),
             kind: ErrorContext::Kind(nom::error::ErrorKind::Fail),
         }
     }
 }
 
 pub fn convert_error(err: ParseError) -> String {
-    todo!();
+    match err {
+        ParseError::Stack { root, context: _ } => match root.as_ref() {
+            ParseError::Root { location, kind } => {
+                let expectation = match kind {
+                    ErrorContext::Expectation { expected } => format!("expected {}", expected),
+                    ErrorContext::Kind(_) => todo!(),
+                    ErrorContext::Context(_) => todo!(),
+                };
+
+                let found = location.fragment().chars().next();
+                let found = format!("`{}`", if found.is_none() { 0 as char } else { found.unwrap() });
+
+                let line_number = location.location_line();
+                let column_number = location.get_utf8_column();
+
+                let line_number = format!("{} |", line_number);
+
+                let location = std::str::from_utf8(location.get_line_beginning())
+                    .expect("Rue can only parse valid utf8");
+
+                let location = format!("{}\t{}", line_number, location);
+                let location = format!("{}\r\n\t{:>offset$} {}", location, "^", expectation, offset = column_number);
+
+                format!("error: {}, found: {}\n{}", expectation, found, location)
+            }
+            _ => panic!("Stack root should always be of type ParseError::Root"),
+        },
+        _ => String::new(),
+    }
 }
 
 pub fn expect<'s, I, O, F>(mut parser: F) -> impl FnMut(I) -> IResult<I, O, ParseError<'s>>
@@ -144,10 +166,12 @@ where
                 _ => panic!("Unexpected, should not be incomplete"),
             };
 
-            let kind = ErrorContext::Expectation(Expectation::Custom(O::expectation_name()));
+            let kind = ErrorContext::Expectation {
+                expected: Expectation::Custom(O::expectation_name()),
+            };
 
             Err(Err::Failure(ParseError::Root {
-                location: err.location(),
+                location: *err.location(),
                 kind,
             }))
         }
