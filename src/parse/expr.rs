@@ -1,9 +1,11 @@
 //! Handles all parsing of expressions.
 //! An expression is essentially any piece of code returning a value.
 
+use std::{cell::RefCell, rc::Rc};
+
 use nom::Parser;
 
-use super::{atom, util, IResult, InputType};
+use super::{atom, error, error::ParseError, util, IResult, InputType};
 
 use crate::ast::*;
 
@@ -12,12 +14,12 @@ use crate::ast::*;
 ///
 /// Where an expression take the following form:
 /// expr => binop | term
-pub fn parse_expression(input: InputType) -> IResult<Expression> {
+pub fn parse_expression(input: InputType) -> IResult<(Expression, Vec<ParseError>)> {
     parse_binary_operation_or_term(input)
 }
 
-fn parse_nested_expression(input: InputType) -> IResult<Expression> {
-    util::ws(nom::sequence::delimited(
+fn parse_nested_expression(input: InputType) -> IResult<(Expression, Vec<ParseError>)> {
+    util::ws(util::delimited_preserve_errors(
         nom::character::complete::char('('),
         parse_expression,
         nom::character::complete::char(')'),
@@ -28,7 +30,7 @@ fn parse_nested_expression(input: InputType) -> IResult<Expression> {
 fn test_parse_nested_expression() {
     use nom_locate::LocatedSpan;
 
-    let (input, expr) = parse_nested_expression(LocatedSpan::new("( 100 + 201 )")).unwrap();
+    let (input, (expr, _)) = parse_nested_expression(LocatedSpan::new("( 100 + 201 )")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -40,16 +42,44 @@ fn test_parse_nested_expression() {
     assert_eq!(input.fragment(), &"");
 }
 
+#[test]
+fn test_parse_nested_expression_error() {
+    use nom_locate::LocatedSpan;
+
+    let res = parse_nested_expression(LocatedSpan::new("( 100 "));
+    assert!(
+        res.is_err(),
+        "Parsing invalid nested expression returned an error"
+    );
+    let err = match res.unwrap_err() {
+        nom::Err::Error(e) => e,
+        nom::Err::Failure(e) => e,
+        _ => panic!("Shouldn't be incomplete"),
+    };
+
+    let (short_message, long_message) = err.error_message();
+
+    assert_eq!(short_message, "expected `)`", "Error has correct message");
+
+    assert_eq!(
+        long_message, "expected either `)` or an operator, found ``",
+        "Error has correct message"
+    );
+
+    println!("{}", err);
+}
+
 /// Attempts to parse either a binary operation or single term from the input.
 ///
 /// A binary operation looks like so:
 /// binop => term op term
 /// term => literal | ( expr )
-fn parse_binary_operation_or_term(input: InputType) -> IResult<Expression> {
+fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, Vec<ParseError>)> {
     fn _build_binary_operation_parser<'p>(
         precedence_level: usize,
         precedence_levels: &'static [&'static [Operator]],
-    ) -> impl Fn(InputType<'p>) -> IResult<'p, Expression> + 'p {
+        error_stack: Rc<RefCell<Vec<ParseError<'p>>>>,
+    ) -> impl FnMut(InputType<'p>) -> IResult<'p, Expression> + 'p {
         let num_precedence_levels = precedence_levels.len();
 
         move |input: InputType<'p>| -> IResult<'p, Expression> {
@@ -61,9 +91,19 @@ fn parse_binary_operation_or_term(input: InputType) -> IResult<Expression> {
 
             let next_level = |input: InputType<'p>| {
                 if precedence_level < num_precedence_levels {
-                    _build_binary_operation_parser(precedence_level + 1, precedence_levels)(input)
+                    _build_binary_operation_parser(
+                        precedence_level + 1,
+                        precedence_levels,
+                        error_stack.clone(),
+                    )(input)
                 } else {
-                    nom::branch::alt((atom::parse_integer_literal, parse_nested_expression))(input)
+                    nom::branch::alt((
+                        atom::parse_integer_literal,
+                        parse_nested_expression.map(|(expr, nested_err_stack)| {
+                            error_stack.borrow_mut().extend(nested_err_stack);
+                            expr
+                        }),
+                    ))(input)
                 }
             };
 
@@ -71,37 +111,42 @@ fn parse_binary_operation_or_term(input: InputType) -> IResult<Expression> {
                 return next_level(input);
             }
 
-            let parse_op_chain = nom::multi::many0(
+            let parse_op_chain = nom::multi::many0(error::preserve(
+                error_stack.clone(),
                 atom::build_operator_parser(operators).and(super::error::expect(next_level)),
-            );
+            ));
 
-            let res = nom::error::context(
-                "parsing expression",
-                nom::combinator::map(
-                    nom::sequence::tuple((next_level, parse_op_chain)),
-                    move |(mut lhs, op_chain)| {
-                        if op_chain.len() == 0 {
-                            lhs
-                        } else {
-                            for (op, rhs) in op_chain {
-                                let _lhs = std::mem::take(&mut lhs);
-                                let mut expr =
-                                    Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
-                                std::mem::swap(&mut lhs, &mut expr);
-                            }
-
-                            lhs
+            let res = nom::combinator::map(
+                nom::sequence::tuple((next_level, parse_op_chain)),
+                move |(mut lhs, op_chain)| {
+                    if op_chain.len() == 0 {
+                        lhs
+                    } else {
+                        for (op, rhs) in op_chain {
+                            let _lhs = std::mem::take(&mut lhs);
+                            let mut expr =
+                                Expression::BinaryOperation(op, Box::new(_lhs), Box::new(rhs));
+                            std::mem::swap(&mut lhs, &mut expr);
                         }
-                    },
-                ),
+
+                        lhs
+                    }
+                },
             )(input);
 
             res
         }
     }
 
+    let error_stack = Rc::new(RefCell::new(Vec::new()));
     let precedence_levels = Operator::precedence_levels();
-    _build_binary_operation_parser(0, precedence_levels)(input)
+    let res = _build_binary_operation_parser(0, precedence_levels, error_stack.clone())(input);
+
+    let error_stack =
+        Rc::try_unwrap(error_stack).expect("Failed to release all references of error_stack");
+    let error_stack = error_stack.into_inner();
+
+    res.map(|(i, expr)| (i, (expr, error_stack)))
 }
 
 #[test]
@@ -109,7 +154,7 @@ fn test_parse_binary_operation() {
     use nom_locate::LocatedSpan;
 
     // Test parsing simple addition
-    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100+201")).unwrap();
+    let (input, (expr, _)) = parse_binary_operation_or_term(LocatedSpan::new("100+201")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -120,7 +165,8 @@ fn test_parse_binary_operation() {
     );
     assert_eq!(input.fragment(), &"");
     // Test with three terms
-    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100+200+300")).unwrap();
+    let (input, (expr, _)) =
+        parse_binary_operation_or_term(LocatedSpan::new("100+200+300")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -135,7 +181,8 @@ fn test_parse_binary_operation() {
     );
     assert_eq!(input.fragment(), &"");
     // Test order of operations, with operators of the same precedence.
-    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100-101+200")).unwrap();
+    let (input, (expr, _)) =
+        parse_binary_operation_or_term(LocatedSpan::new("100-101+200")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -150,7 +197,8 @@ fn test_parse_binary_operation() {
     );
     assert_eq!(input.fragment(), &"");
     // Test order of operations with operators of different precedence
-    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("100/2+300/4")).unwrap();
+    let (input, (expr, _)) =
+        parse_binary_operation_or_term(LocatedSpan::new("100/2+300/4")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -169,7 +217,8 @@ fn test_parse_binary_operation() {
     );
     assert_eq!(input.fragment(), &"");
 
-    let (input, expr) = parse_binary_operation_or_term(LocatedSpan::new("10 * (100 + 201)")).unwrap();
+    let (input, (expr, _)) =
+        parse_binary_operation_or_term(LocatedSpan::new("10 * (100 + 201)")).unwrap();
     assert_eq!(
         expr,
         Expression::BinaryOperation(
@@ -184,3 +233,22 @@ fn test_parse_binary_operation() {
     );
     assert_eq!(input.fragment(), &"");
 }
+
+// TODO: The premise for this test is incorrect
+// #[test]
+// fn test_parse_binary_operation_err() {
+//     use nom_locate::LocatedSpan;
+
+//     let res = parse_binary_operation_or_term(LocatedSpan::new("10 * a"));
+//     assert!(res.is_err(), "Parsing invalid binary operation returns an error");
+
+//     let err = match res.unwrap_err() {
+//         nom::Err::Error(e) => e,
+//         nom::Err::Failure(e) => e,
+//         _ => panic!("Shouldn't be incomplete"),
+//     };
+
+//     assert_eq!(err.error_message(), "expected expression", "Error has correct short message");
+//     assert_eq!(err.error_message_long(), "expected expression, found `a`", "Error has correct short message");
+
+// }

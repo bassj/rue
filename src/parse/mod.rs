@@ -19,10 +19,7 @@ pub fn parse_source<'s, T: Into<&'s str>>(input: T) -> Result<ast::Expression, P
     let src_string = input.into();
     let src = LocatedSpan::new(src_string.as_ref());
 
-    let res = nom::error::context(
-        "parsing source",
-        nom::combinator::all_consuming(parse_statement),
-    )(src);
+    let res = nom::combinator::all_consuming(parse_statement)(src);
 
     match res {
         Ok((_, expr)) => Ok(expr),
@@ -45,26 +42,16 @@ fn test_parse_source_error() {
     let result = parse_source(input);
     assert!(result.is_err(), "Result of parsing '100 + ' is an error.");
     let err = result.unwrap_err();
-    println!("{}", err);
-    // assert_eq!(
-    //     format!("{:#?}", err),
-    //     "ASDF",
-    //     "ParseError has correct debug string"
-    // );
-    // assert_eq!(
-    //     format!("{}", err),
-    //     "ASDF",
-    //     "ParseError has correct display string"
-    // );
+    let (short_message, long_message) = err.error_message();
+    assert_eq!(short_message, "unexpected token `+`", "Error has correct short message");
+    assert_eq!(long_message, "", "Error has correct long message");
 }
 
 fn parse_statement(input: InputType) -> IResult<Expression> {
-    let t = nom::error::context(
-        "parsing statement",
-        nom::Parser::and(
-            expr::parse_expression,
-            nom::branch::alt((nom::character::complete::line_ending, nom::combinator::eof)),
-        ),
+    let t = nom::sequence::terminated(
+        expr::parse_expression,
+        nom::branch::alt((nom::character::complete::line_ending, nom::combinator::eof)),
     )(input);
-    t.map(|(input, tuple)| (input, tuple.0))
+
+    t.map(|(i, (expr, _err_stack))| (i, expr))
 }

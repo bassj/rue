@@ -5,7 +5,7 @@ use nom::Slice;
 
 use crate::ast::{Expression, Operator};
 
-use super::{util, IResult, InputType};
+use super::{util, error, IResult, InputType};
 
 /// Constructrs a closure that can be used to parse operators out of our input stream.
 pub fn build_operator_parser(
@@ -29,13 +29,13 @@ pub fn build_operator_parser(
     move |input: InputType| {
         match &operators {
             Some(ops) => {
-                util::ws(nom::combinator::map(
+                util::ws(error::expect(nom::combinator::map(
                     nom::character::complete::one_of(ops.as_str()),
                     |c: char| Operator::try_from(c).unwrap(),
                     // This shouldn't fail, since the parser can only match valid characters
-                ))(input)
+                )))(input)
             }
-            _ => util::ws(parse_any_operator)(input),
+            _ => util::ws(error::expect(parse_any_operator))(input),
         }
     }
 }
