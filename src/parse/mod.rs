@@ -31,39 +31,6 @@ pub fn parse_source<'s, T: Into<&'s str>>(input: T) -> Result<ast::Expression, P
     }
 }
 
-#[test]
-fn test_parse_source_error() {
-    let input = "100 + ";
-    let result = parse_source(input);
-    assert!(result.is_err(), "Result of parsing '100 + ' is an error.");
-
-    let err = result.unwrap_err();
-
-    let (short_message, long_message) = err.error_message();
-    assert_eq!(short_message, "expected an expression", "Error has correct short message");
-    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
-
-    let input = "100 * ";
-    let result = parse_source(input);
-    assert!(result.is_err(), "Result of parsing '100 * ' is an error.");
-
-    let err = result.unwrap_err();
-
-    let (short_message, long_message) = err.error_message();
-    assert_eq!(short_message, "expected an expression", "Error has correct short message");
-    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
-
-    let input = "(100 + 100) *";
-    let result = parse_source(input);
-    assert!(result.is_err(), "Result is an error.");
-
-    let err = result.unwrap_err();
-
-    let (short_message, long_message) = err.error_message();
-    assert_eq!(short_message, "expected an expression", "Error has correct short message");
-    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
-}
-
 fn parse_statement(input: InputType) -> IResult<Expression> {
     let t = nom_preserve::sequence::terminated(
         nom_preserve::error::blame(expr::parse_expression),

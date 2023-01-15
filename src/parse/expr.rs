@@ -18,6 +18,53 @@ pub fn parse_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
     parse_binary_operation_or_term(input)
 }
 
+#[test]
+pub fn test_parse_expression_error() {
+    use nom_locate::LocatedSpan;
+
+    let input = LocatedSpan::new("100 + ");
+    let result = parse_expression(input);
+    assert!(result.is_err(), "Result of parsing '100 + ' is an error.");
+
+    let err = match result.unwrap_err() {
+        nom::Err::Error(e) => e,
+        nom::Err::Failure(e) => e,
+        _ => panic!("Shouldn't be incomplete"),
+    };
+
+    let (short_message, long_message) = err.error_message();
+    assert_eq!(short_message, "expected an expression", "Error has correct short message");
+    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
+
+    let input = LocatedSpan::new("100 * ");
+    let result = parse_expression(input);
+    assert!(result.is_err(), "Result of parsing '100 * ' is an error.");
+
+    let err = match result.unwrap_err() {
+        nom::Err::Error(e) => e,
+        nom::Err::Failure(e) => e,
+        _ => panic!("Shouldn't be incomplete"),
+    };
+
+    let (short_message, long_message) = err.error_message();
+    assert_eq!(short_message, "expected an expression", "Error has correct short message");
+    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
+
+    let input = LocatedSpan::new("(100 + 100) *");
+    let result = parse_expression(input);
+    assert!(result.is_err(), "Result is an error.");
+
+    let err = match result.unwrap_err() {
+        nom::Err::Error(e) => e,
+        nom::Err::Failure(e) => e,
+        _ => panic!("Shouldn't be incomplete"),
+    };
+
+    let (short_message, long_message) = err.error_message();
+    assert_eq!(short_message, "expected an expression", "Error has correct short message");
+    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
+}
+
 fn parse_nested_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
     util::ws(nom_preserve::sequence::delimited(
         nom::character::complete::char('('),
