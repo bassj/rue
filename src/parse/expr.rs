@@ -65,8 +65,6 @@ fn test_parse_nested_expression_error() {
         long_message, "expected either `)` or an operator, found ``",
         "Error has correct message"
     );
-
-    println!("{}", err);
 }
 
 /// Attempts to parse either a binary operation or single term from the input.
