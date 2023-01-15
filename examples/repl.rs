@@ -19,7 +19,8 @@ fn evaulate_expression(expr: Expression) -> i64 {
                 Operator::Multiply => { lhs * rhs },
                 Operator::Divide => { lhs / rhs },
             }
-        }
+        },
+        _ => unimplemented!(),
     }
 }
 

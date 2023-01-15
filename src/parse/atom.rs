@@ -5,7 +5,7 @@ use nom::Slice;
 
 use crate::ast::{Expression, Operator};
 
-use super::{util, error, IResult, InputType};
+use super::{error, util, IResult, InputType};
 
 /// Constructrs a closure that can be used to parse operators out of our input stream.
 pub fn build_operator_parser(

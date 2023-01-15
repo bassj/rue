@@ -1,6 +1,6 @@
-
 #[derive(Debug, PartialEq)]
 pub enum Expression {
+    FunctionInvocation(String, Vec<Expression>),
     IntegerLiteral(i64),
     BinaryOperation(Operator, Box<Expression>, Box<Expression>),
     NoOp

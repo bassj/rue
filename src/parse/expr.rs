@@ -5,7 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use nom::Parser;
 
-use super::{atom, error::ErrorStack, util, IResult, InputType};
+use super::{atom, func, error::ErrorStack, util, IResult, InputType};
 
 use crate::ast::*;
 
@@ -16,6 +16,62 @@ use crate::ast::*;
 /// expr => binop | term
 pub fn parse_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
     parse_binary_operation_or_term(input)
+}
+
+#[test]
+pub fn test_parse_expression_function_invocation() {
+    use nom_locate::LocatedSpan;
+
+    let input = LocatedSpan::new("test_function()");
+    let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
+
+    assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+    assert_eq!(
+        expr,
+        Expression::FunctionInvocation(String::from("test_function"), Vec::new()),
+        "Parser parses correct expression"
+    );
+
+    let input = LocatedSpan::new("100 + test_function()");
+    let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
+
+    assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+    assert_eq!(
+        expr,
+        Expression::BinaryOperation(
+            Operator::Add,
+            Box::new(Expression::IntegerLiteral(100)),
+            Box::new(Expression::FunctionInvocation(
+                String::from("test_function"),
+                Vec::new()
+            ))
+        ),
+        "Parser parses correct expression"
+    );
+
+    let input = LocatedSpan::new("100 + test_function(200 + 300)");
+    let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
+
+    assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+    assert_eq!(
+        expr,
+        Expression::BinaryOperation(
+            Operator::Add,
+            Box::new(Expression::IntegerLiteral(100)),
+            Box::new(Expression::FunctionInvocation(
+                String::from("test_function"),
+                vec![Expression::BinaryOperation(
+                    Operator::Add,
+                    Box::new(Expression::IntegerLiteral(200)),
+                    Box::new(Expression::IntegerLiteral(300))
+                )]
+            ))
+        ),
+        "Parser parses correct expression"
+    );
 }
 
 #[test]
@@ -33,8 +89,14 @@ pub fn test_parse_expression_error() {
     };
 
     let (short_message, long_message) = err.error_message();
-    assert_eq!(short_message, "expected an expression", "Error has correct short message");
-    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
+    assert_eq!(
+        short_message, "expected an expression",
+        "Error has correct short message"
+    );
+    assert_eq!(
+        long_message, "expected an expression, found ``",
+        "Error has correct long message"
+    );
 
     let input = LocatedSpan::new("100 * ");
     let result = parse_expression(input);
@@ -47,8 +109,14 @@ pub fn test_parse_expression_error() {
     };
 
     let (short_message, long_message) = err.error_message();
-    assert_eq!(short_message, "expected an expression", "Error has correct short message");
-    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
+    assert_eq!(
+        short_message, "expected an expression",
+        "Error has correct short message"
+    );
+    assert_eq!(
+        long_message, "expected an expression, found ``",
+        "Error has correct long message"
+    );
 
     let input = LocatedSpan::new("(100 + 100) *");
     let result = parse_expression(input);
@@ -61,8 +129,14 @@ pub fn test_parse_expression_error() {
     };
 
     let (short_message, long_message) = err.error_message();
-    assert_eq!(short_message, "expected an expression", "Error has correct short message");
-    assert_eq!(long_message, "expected an expression, found ``", "Error has correct long message");
+    assert_eq!(
+        short_message, "expected an expression",
+        "Error has correct short message"
+    );
+    assert_eq!(
+        long_message, "expected an expression, found ``",
+        "Error has correct long message"
+    );
 }
 
 fn parse_nested_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
@@ -148,6 +222,7 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
                             error_stack.borrow_mut().extend(nested_err_stack);
                             expr
                         }),
+                        func::parse_function_invocation,
                     ))(input)
                 }
             };
@@ -159,9 +234,9 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
             let parse_op_chain = nom::multi::many0(nom_preserve::error::preserve(
                 error_stack.clone(),
                 atom::build_operator_parser(operators)
-                    // The reason for the cut combinator - 
+                    // The reason for the cut combinator -
                     // If we encounter an expression where we have an operator, but no RHS
-                    // Then we know we cannot recover. 
+                    // Then we know we cannot recover.
                     // This may change if we decide to add unary postfix operators.
                     .and(nom::combinator::cut(super::error::expect(next_level))),
             ));

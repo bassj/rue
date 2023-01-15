@@ -2,6 +2,7 @@ mod atom;
 mod error;
 mod expr;
 mod util;
+mod func;
 
 use nom::Err;
 
