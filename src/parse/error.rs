@@ -1,14 +1,14 @@
-use std::{any::Any, collections::HashSet, fmt::Write, rc::Rc};
-
-use core::cell::RefCell;
+use std::{any::Any, collections::HashSet, fmt::Write};
 
 use itertools::Itertools;
-use nom::{Err, IResult, Parser, error::ErrorKind};
+use nom::{Err, IResult,  error::ErrorKind};
 use nom_locate::LocatedSpan;
 
 use colored::Colorize;
 
 use super::InputType;
+
+pub type ErrorStack<'p> = nom_preserve::error::ErrorStack<InputType<'p>, ParseError<'p>>;
 
 pub trait Expectable {
     fn expectation_name() -> &'static str;
@@ -115,7 +115,9 @@ impl<'s> ParseError<'s> {
                 _ => unimplemented!(),
             };
 
-            (message, found)
+            let long_message = format!("{}, found {}", message, found);
+
+            (message, long_message)
         }
 
         fn _extract_expectations(errs: &Vec<ParseError>) -> Vec<Expectation> {
@@ -126,7 +128,17 @@ impl<'s> ParseError<'s> {
                         ErrorContext::Expectation { expected } => expectations.push(expected.clone()),
                         _ => (),
                     },
-                    _ => todo!()
+                    ParseError::Stack { root, context: _ } => match root.as_ref() {
+                        ParseError::Root { location: _, kind } => match kind {
+                            ErrorContext::Expectation { expected } => expectations.push(expected.clone()),
+                            _ => (),
+                        }
+                        ParseError::Alt(errs) => expectations.extend(_extract_expectations(errs)),
+                        _ => panic!("Root shouldn't be anything other than ParseError::Root"),
+                    },
+                    ParseError::Alt(errs) => {
+                        expectations.extend(_extract_expectations(errs))
+                    },
                 }
             }
 
@@ -338,24 +350,6 @@ where
             Err(err)
         }
         e => e,
-    }
-}
-
-/// If the result of the provided parser is an Error, preserve it in the stack for later reference.
-pub fn preserve<'p, I, E: Clone + 'p, F, O>(
-    stack: Rc<RefCell<Vec<E>>>,
-    mut f: F,
-) -> impl FnMut(I) -> IResult<I, O, E> + 'p
-where
-    F: Parser<I, O, E> + 'p,
-{
-    move |i: I| match f.parse(i) {
-        Ok(o) => Ok(o),
-        Err(Err::Error(e)) => {
-            stack.borrow_mut().push(e.clone());
-            Err(Err::Error(e))
-        }
-        Err(e) => Err(e),
     }
 }
 

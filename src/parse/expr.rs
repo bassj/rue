@@ -5,7 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use nom::Parser;
 
-use super::{atom, error, error::ParseError, util, IResult, InputType};
+use super::{atom, error::ErrorStack, util, IResult, InputType};
 
 use crate::ast::*;
 
@@ -14,12 +14,12 @@ use crate::ast::*;
 ///
 /// Where an expression take the following form:
 /// expr => binop | term
-pub fn parse_expression(input: InputType) -> IResult<(Expression, Vec<ParseError>)> {
+pub fn parse_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
     parse_binary_operation_or_term(input)
 }
 
-fn parse_nested_expression(input: InputType) -> IResult<(Expression, Vec<ParseError>)> {
-    util::ws(util::delimited_preserve_errors(
+fn parse_nested_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
+    util::ws(nom_preserve::sequence::delimited(
         nom::character::complete::char('('),
         parse_expression,
         nom::character::complete::char(')'),
@@ -74,11 +74,11 @@ fn test_parse_nested_expression_error() {
 /// A binary operation looks like so:
 /// binop => term op term
 /// term => literal | ( expr )
-fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, Vec<ParseError>)> {
+fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, ErrorStack)> {
     fn _build_binary_operation_parser<'p>(
         precedence_level: usize,
         precedence_levels: &'static [&'static [Operator]],
-        error_stack: Rc<RefCell<Vec<ParseError<'p>>>>,
+        error_stack: Rc<RefCell<ErrorStack<'p>>>,
     ) -> impl FnMut(InputType<'p>) -> IResult<'p, Expression> + 'p {
         let num_precedence_levels = precedence_levels.len();
 
@@ -111,9 +111,14 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
                 return next_level(input);
             }
 
-            let parse_op_chain = nom::multi::many0(error::preserve(
+            let parse_op_chain = nom::multi::many0(nom_preserve::error::preserve(
                 error_stack.clone(),
-                atom::build_operator_parser(operators).and(super::error::expect(next_level)),
+                atom::build_operator_parser(operators)
+                    // The reason for the cut combinator - 
+                    // If we encounter an expression where we have an operator, but no RHS
+                    // Then we know we cannot recover. 
+                    // This may change if we decide to add unary postfix operators.
+                    .and(nom::combinator::cut(super::error::expect(next_level))),
             ));
 
             let res = nom::combinator::map(
@@ -233,22 +238,3 @@ fn test_parse_binary_operation() {
     );
     assert_eq!(input.fragment(), &"");
 }
-
-// TODO: The premise for this test is incorrect
-// #[test]
-// fn test_parse_binary_operation_err() {
-//     use nom_locate::LocatedSpan;
-
-//     let res = parse_binary_operation_or_term(LocatedSpan::new("10 * a"));
-//     assert!(res.is_err(), "Parsing invalid binary operation returns an error");
-
-//     let err = match res.unwrap_err() {
-//         nom::Err::Error(e) => e,
-//         nom::Err::Failure(e) => e,
-//         _ => panic!("Shouldn't be incomplete"),
-//     };
-
-//     assert_eq!(err.error_message(), "expected expression", "Error has correct short message");
-//     assert_eq!(err.error_message_long(), "expected expression, found `a`", "Error has correct short message");
-
-// }

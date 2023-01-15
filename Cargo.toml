@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 nom = "7.1.1"
 nom_locate = "4.0.0"
+nom_preserve = { version = "0.1.0", path = "../nom_preserve" }
 colored = "2.0.0"
 itertools = "0.10.5"
