@@ -13,3 +13,4 @@ nom_preserve = { version = "0.1.0", git = "https://github.com/bassj/nom_preserve
 colored = "2.0.0"
 itertools = "0.10.5"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
+ar = "0.9.0"
