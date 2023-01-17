@@ -1,18 +1,43 @@
 use crate::ast::Expression;
-use inkwell::{context::Context, targets::*, OptimizationLevel, module::*, builder::Builder};
+use inkwell::{context::Context, targets::*, OptimizationLevel, module::*, builder::Builder, values::BasicMetadataValueEnum};
 use std::path::Path;
 use ar;
 use std::fs::File;
 
-fn generate_expression(expr: Expression, builder: &Builder, module: &Module) {
+fn build_expr_into_value<'ctx>(expr: Expression, builder: &Builder, module: &Module<'ctx>) -> BasicMetadataValueEnum<'ctx> {
+    let context = module.get_context();
+    let is_constant = expr.is_constant();
+
+    let i32_type = context.i32_type();
+
+    if is_constant {
+        let val = expr.compute_value();
+        let const_val = i32_type.const_int(val.try_into().unwrap(), false);
+
+        inkwell::values::BasicMetadataValueEnum::IntValue(const_val)
+    } else {
+        todo!()
+    }
+}
+
+fn generate_expression<'ctx>(expr: Expression, builder: &Builder, module: &Module<'ctx>) {
     match expr {
         Expression::FunctionInvocation(func_name, func_args) => {
             let func_val = module.get_function(func_name.as_str()).expect(format!("Cannot find function '{}'", func_name).as_str());
 
-            // TODO: Figure out how to handle code generation for the function arguments.
+            // let func_args: Vec<BasicMetadataValueEnum> = func_args.into_iter().map(|arg| build_expr_into_value(arg, builder, module)).collect();
+            let mut arg_values = Vec::with_capacity(func_args.len());
+
+            for arg in func_args {
+                
+                let arg_val = build_expr_into_value(arg, builder, module);
+
+                arg_values.push(arg_val);
+            }
+
             builder.build_call(
                 func_val,
-                &[],
+                &arg_values, 
                 func_name.as_str()
             );
         }, 
@@ -20,7 +45,7 @@ fn generate_expression(expr: Expression, builder: &Builder, module: &Module) {
     }
 }
 
-pub fn generate_binary(ast: Expression, file: &Path) {
+pub fn generate_binary(ast: Vec<Expression>, file: &Path) {
     let context = Context::create();
     let module = context.create_module("main"); // TODO: Some way to specify which module this is.
     // Maybe it would make sense to add some modeling for what a module actually is.
@@ -33,7 +58,7 @@ pub fn generate_binary(ast: Expression, file: &Path) {
     let void_type = context.void_type();
     let i32_type = context.i32_type();
 
-    let print_function_signature = void_type.fn_type(&[], false);
+    let print_function_signature = void_type.fn_type(&[i32_type.into()], false);
     let external_print_function = module.add_function("rue_print", print_function_signature, Some(Linkage::AvailableExternally));
 
     // TODO: For now, since we don't have a concept of function declaration, we're just going to
@@ -47,8 +72,9 @@ pub fn generate_binary(ast: Expression, file: &Path) {
     builder.position_at_end(basic_block);
 
     // Now we're going to generate our code inside the main funcion.
-
-    generate_expression(ast, &builder, &module);
+    for expr in ast {
+        generate_expression(expr, &builder, &module);
+    }
 
     // To wrap up the function, we're just going to return the value we created in the
     // int_constant variable above
