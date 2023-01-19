@@ -1,0 +1,12 @@
+[package]
+name = "rue_sandbox"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rue_runtime = { path = "../rue_runtime" }
+
+[build-dependencies]
+rue = { path = "../" }

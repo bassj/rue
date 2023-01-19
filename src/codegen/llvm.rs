@@ -3,6 +3,7 @@ use inkwell::{context::Context, targets::*, OptimizationLevel, module::*, builde
 use std::path::Path;
 use ar;
 use std::fs::File;
+use std::ffi::OsStr;
 
 fn build_expr_into_value<'ctx>(expr: Expression, builder: &Builder, module: &Module<'ctx>) -> BasicMetadataValueEnum<'ctx> {
     let context = module.get_context();
@@ -45,7 +46,7 @@ fn generate_expression<'ctx>(expr: Expression, builder: &Builder, module: &Modul
     }
 }
 
-pub fn generate_binary(ast: Vec<Expression>, file: &Path) {
+pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Expression>, file: P) {
     let context = Context::create();
     let module = context.create_module("main"); // TODO: Some way to specify which module this is.
     // Maybe it would make sense to add some modeling for what a module actually is.
@@ -65,7 +66,7 @@ pub fn generate_binary(ast: Vec<Expression>, file: &Path) {
     // stick everything we generate in the body of a "main" function. 
 
     let main_function_signature = i32_type.fn_type(&[], false);
-    let main_function = module.add_function("rue_main", main_function_signature, None);
+    let main_function = module.add_function("_rue_main", main_function_signature, None);
     let basic_block = context.append_basic_block(main_function, "entry");
     let int_constant = i32_type.const_int(0, false);
 
@@ -100,14 +101,14 @@ pub fn generate_binary(ast: Vec<Expression>, file: &Path) {
         )
         .unwrap();
 
-    target_machine.write_to_file(&module, FileType::Object, file).unwrap();
+    target_machine.write_to_file(&module, FileType::Object, file.as_ref()).unwrap();
 
     module.print_to_stderr();
 }
 
-pub fn link_binaries_into_archive(files: Vec<&Path>, output: &Path) {
+pub fn link_binaries_into_archive<P: AsRef<Path> + AsRef<OsStr>>(files: Vec<P>, output: P) {
     {
-        let output_file = File::create(output).unwrap();
+        let output_file = File::create(output.as_ref() as &Path).unwrap();
         let mut builder = ar::Builder::new(output_file);
 
         for object_file in files {
