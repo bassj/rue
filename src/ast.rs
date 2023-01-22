@@ -2,7 +2,7 @@ use crate::types::RueValue;
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
-    VariableDeclaration(String, Expression),
+    VariableDeclaration(String, Option<String>, Expression),
     Expression(Expression),
 }
 

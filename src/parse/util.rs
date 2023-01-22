@@ -21,21 +21,32 @@ where
 
 fn parse_keyword(input: InputType) -> crate::parse::IResult<String> {
     nom::combinator::map(nom::bytes::complete::tag("let"), |tag: InputType| {
-       tag.fragment().to_string() 
+        tag.fragment().to_string()
     })(input)
 }
 
 pub fn parse_identifier(input: InputType) -> crate::parse::IResult<String> {
-    let (input, ((), (first_part, second_part))) = nom::combinator::not(parse_keyword).and(nom::sequence::tuple((
-        nom::bytes::complete::take_while1(|c: char| c.is_alphabetic() || c == '_'),
-        nom::bytes::complete::take_while(|c: char| c.is_alphanumeric() || c == '_')
-    ))).parse(input)?;
+    let (input, ((), (first_part, second_part))) = nom::combinator::not(parse_keyword)
+        .and(nom::sequence::tuple((
+            nom::bytes::complete::take_while1(|c: char| c.is_alphabetic() || c == '_'),
+            nom::bytes::complete::take_while(|c: char| c.is_alphanumeric() || c == '_'),
+        )))
+        .parse(input)?;
 
     let mut function_name = first_part.to_string();
 
     function_name.extend(second_part.chars());
 
     Ok((input, function_name))
+}
+
+pub fn parse_type_tag(input: InputType) -> crate::parse::IResult<String> {
+    let (input, type_name) = nom::sequence::preceded(
+        ws(nom::bytes::complete::tag(":")),
+        ws(parse_identifier),
+    )(input)?;
+
+    Ok((input, type_name))
 }
 
 #[cfg(test)]
@@ -67,21 +78,13 @@ mod tests {
         let input = LocatedSpan::new("      test        \r\n");
         let (input, tag) = ws(inner_parser)(input).unwrap();
 
-        assert_eq!(
-            input.fragment(),
-            &"\r\n",
-            "parser returns correct input"
-        );
+        assert_eq!(input.fragment(), &"\r\n", "parser returns correct input");
         assert_eq!(tag.fragment(), &"test", "parser returns correct tag");
 
         let input = LocatedSpan::new("      test        \n");
         let (input, tag) = ws(inner_parser)(input).unwrap();
 
-        assert_eq!(
-            input.fragment(),
-            &"\n",
-            "parser returns correct input"
-        );
+        assert_eq!(input.fragment(), &"\n", "parser returns correct input");
         assert_eq!(tag.fragment(), &"test", "parser returns correct tag");
     }
 
@@ -99,8 +102,7 @@ mod tests {
         );
 
         assert_eq!(
-            &func_name,
-            &"test_function",
+            &func_name, &"test_function",
             "Parser returned the correct function name"
         );
 
@@ -114,11 +116,9 @@ mod tests {
         );
 
         assert_eq!(
-            &func_name,
-            &"test_function1",
+            &func_name, &"test_function1",
             "Parser returned the correct function name"
         );
-
 
         let input = LocatedSpan::new("test1_function()");
         let (input, func_name) = parse_identifier(input).unwrap();
@@ -130,11 +130,9 @@ mod tests {
         );
 
         assert_eq!(
-            &func_name,
-            &"test1_function",
+            &func_name, &"test1_function",
             "Parser returned the correct function name"
         );
-
 
         let input = LocatedSpan::new("_test()");
         let (input, func_name) = parse_identifier(input).unwrap();
@@ -146,8 +144,7 @@ mod tests {
         );
 
         assert_eq!(
-            &func_name,
-            &"_test",
+            &func_name, &"_test",
             "Parser returned the correct function name"
         );
     }

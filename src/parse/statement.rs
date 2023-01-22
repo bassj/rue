@@ -1,8 +1,8 @@
 use crate::ast::Statement;
 use crate::parse::error::ErrorStack;
+use crate::parse::util;
 use crate::parse::IResult;
 use crate::parse::InputType;
-use crate::parse::util;
 
 pub fn parse_statement(input: InputType) -> IResult<Statement> {
     let t = nom_preserve::sequence::terminated(
@@ -19,26 +19,29 @@ pub fn parse_statement(input: InputType) -> IResult<Statement> {
 }
 
 fn parse_variable_declaration(input: InputType) -> IResult<(Statement, ErrorStack)> {
-    let (input, (var_name, (var_value, error_stack))) = nom::sequence::preceded(
-        util::ws(nom::bytes::complete::tag("let")), 
+    let (input, ((var_name, var_type), (var_value, error_stack))) = nom::sequence::preceded(
+        util::ws(nom::bytes::complete::tag("let")),
         nom::sequence::separated_pair(
-            super::util::parse_identifier,
+            nom::sequence::tuple((
+                super::util::parse_identifier,
+                nom::combinator::opt(super::util::parse_type_tag),
+            )),
             util::ws(nom::bytes::complete::tag("=")),
             super::expr::parse_expression,
-        ),  
+        ),
     )(input)?;
 
-    let stmt = Statement::VariableDeclaration(var_name, var_value);
+    let stmt = Statement::VariableDeclaration(var_name, var_type, var_value);
 
     Ok((input, (stmt, error_stack)))
 }
-
 
 #[cfg(test)]
 mod tests {
     use crate::types::RueInteger;
 
     use super::*;
+    use crate::ast::Expression;
     use nom_locate::LocatedSpan;
 
     #[test]
@@ -52,23 +55,68 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test".to_string(), Expression::Literal(RueInteger::from(10).into())),
+            Statement::VariableDeclaration(
+                "test".to_string(),
+                None,
+                Expression::Literal(RueInteger::from(10).into())
+            ),
+            "Parser parses correct statement"
+        );
+    }
+
+    #[test]
+    fn test_parse_variable_declaration_type_tag() {
+        use crate::ast::Expression;
+
+        let input = LocatedSpan::new("let test:u64 = 10");
+        let (input, (stmt, _error_stack)) = parse_variable_declaration(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            stmt,
+            Statement::VariableDeclaration(
+                "test".to_string(),
+                Some("u64".to_string()),
+                Expression::Literal(RueInteger::from(10).into())
+            ),
+            "Parser parses correct statement"
+        );
+
+        let input = LocatedSpan::new("let test : u64 = 10");
+        let (input, (stmt, _error_stack)) = parse_variable_declaration(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            stmt,
+            Statement::VariableDeclaration(
+                "test".to_string(),
+                Some("u64".to_string()),
+                Expression::Literal(RueInteger::from(10).into())
+            ),
             "Parser parses correct statement"
         );
     }
 
     #[test]
     fn test_parse_statement_variable_declaration() {
-        use crate::ast::Expression;
-
         let input = LocatedSpan::new("let test = 10\nlet test2 = 10");
         let (input, stmt) = parse_statement(input).unwrap();
-        
-        assert_eq!(input.fragment(), &"let test2 = 10", "Parser returns correct input");
+
+        assert_eq!(
+            input.fragment(),
+            &"let test2 = 10",
+            "Parser returns correct input"
+        );
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test".to_string(), Expression::Literal(RueInteger::from(10).into())),
+            Statement::VariableDeclaration(
+                "test".to_string(),
+                None,
+                Expression::Literal(RueInteger::from(10).into())
+            ),
             "Parser parses correct statement"
         );
 
@@ -78,18 +126,30 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test2".to_string(), Expression::Literal(RueInteger::from(10).into())),
+            Statement::VariableDeclaration(
+                "test2".to_string(),
+                None,
+                Expression::Literal(RueInteger::from(10).into())
+            ),
             "Parser parses correct statement"
         );
 
         let input = LocatedSpan::new("let test = 10\r\nlet test2 = 10");
         let (input, stmt) = parse_statement(input).unwrap();
-        
-        assert_eq!(input.fragment(), &"let test2 = 10", "Parser returns correct input");
+
+        assert_eq!(
+            input.fragment(),
+            &"let test2 = 10",
+            "Parser returns correct input"
+        );
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test".to_string(), Expression::Literal(RueInteger::from(10).into())),
+            Statement::VariableDeclaration(
+                "test".to_string(),
+                None,
+                Expression::Literal(RueInteger::from(10).into())
+            ),
             "Parser parses correct statement"
         );
 
@@ -99,7 +159,29 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test2".to_string(), Expression::Literal(RueInteger::from(10).into())),
+            Statement::VariableDeclaration(
+                "test2".to_string(),
+                None,
+                Expression::Literal(RueInteger::from(10).into())
+            ),
+            "Parser parses correct statement"
+        );
+    }
+
+    #[test]
+    fn test_parse_statement_variable_declaration_with_type_tag() {
+        let input = LocatedSpan::new("let test: u64 = 10");
+        let (input, stmt) = parse_statement(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            stmt,
+            Statement::VariableDeclaration(
+                "test".to_string(),
+                Some("u64".to_string()),
+                Expression::Literal(RueInteger::from(10).into())
+            ),
             "Parser parses correct statement"
         );
     }

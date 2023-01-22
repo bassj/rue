@@ -5,11 +5,11 @@ use crate::{
 use ar;
 use inkwell::{
     builder::Builder,
-    context::Context,
+    context::{Context, ContextRef},
     module::*,
     targets::*,
     values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum},
-    OptimizationLevel,
+    OptimizationLevel, types::{BasicType, BasicTypeEnum},
 };
 use std::ffi::OsStr;
 use std::fs::File;
@@ -138,22 +138,44 @@ fn generate_expression<'ctx>(
     }
 }
 
+fn llvm_type_from_type_string(type_string: String, context: ContextRef) -> BasicTypeEnum {
+    match type_string.as_str() {
+        "i8" => context.i8_type(),
+        "i16" => context.i16_type(),
+        "i32" => context.i32_type(),
+        "i64" => context.i64_type(),
+        "i128" => context.i128_type(),
+        "u8" => context.i8_type(),
+        "u16" => context.i16_type(),
+        "u32" => context.i32_type(),
+        "u64" => context.i64_type(),
+        "u128" => context.i128_type(),
+        _ => panic!("No such type")
+    }.as_basic_type_enum()
+}
+
 fn generate_statement<'ctx>(stmt: Statement, builder: &Builder<'ctx>, module: &Module<'ctx>) {
     match stmt {
         Statement::Expression(expr) => {
             generate_expression(expr, builder, module);
         }
-        Statement::VariableDeclaration(var_name, var_value) => {
+        Statement::VariableDeclaration(var_name, var_type, var_value) => {
             let context = module.get_context();
-            let i32_type = context.i32_type();
+            let var_value = generate_expression(var_value, builder, module)
+                .unwrap()
+                .as_basic_value_enum();
 
-            let var_global = module.add_global(i32_type, None, var_name.as_str());
+            let var_type = if let Some(var_type) = var_type {
+                llvm_type_from_type_string(var_type, context)
+            } else {
+                var_value.get_type()
+            };
+
+            let var_global = module.add_global(var_type, None, var_name.as_str());
             var_global.set_linkage(Linkage::External);
 
             var_global.set_initializer(
-                &generate_expression(var_value, builder, module)
-                    .unwrap()
-                    .as_basic_value_enum(),
+                &var_value,
             );
         }
     };
