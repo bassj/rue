@@ -70,9 +70,7 @@ fn generate_expression<'ctx>(
 
             if expr.is_constant() {
                 let val = build_expr_into_const(expr, builder, module);
-                Some(Box::new(
-                    BasicValueEnum::try_from(val).unwrap(),
-                ))
+                Some(Box::new(BasicValueEnum::try_from(val).unwrap()))
             } else {
                 match expr {
                     Expression::BinaryOperation(op, lhs, rhs) => {
@@ -90,9 +88,11 @@ fn generate_expression<'ctx>(
                             Operator::Subtract => {
                                 builder.build_int_sub(lhs, rhs, "integer subtraction")
                             }
+
                             Operator::Divide => {
                                 builder.build_int_signed_div(lhs, rhs, "integer division")
                             }
+
                             Operator::Multiply => {
                                 builder.build_int_mul(lhs, rhs, "integer multiplication")
                             }
@@ -103,12 +103,16 @@ fn generate_expression<'ctx>(
                     _ => unimplemented!(),
                 }
             }
-        },
+        }
         Expression::Variable(var_name) => {
-            let variable = module.get_global(var_name.as_str()).expect("Cannot find variable");
+            let variable = module
+                .get_global(var_name.as_str())
+                .expect("Cannot find variable");
             Some(Box::new(variable))
-        },
-        e => Some(Box::new(BasicValueEnum::try_from(build_expr_into_const(e, builder, module)).unwrap())),
+        }
+        e => Some(Box::new(
+            BasicValueEnum::try_from(build_expr_into_const(e, builder, module)).unwrap(),
+        )),
     }
 }
 
@@ -122,10 +126,10 @@ fn generate_statement<'ctx>(stmt: Statement, builder: &Builder<'ctx>, module: &M
             let i32_type = context.i32_type();
 
             let var_global = module.add_global(i32_type, None, var_name.as_str());
+            var_global.set_linkage(Linkage::External);
 
-            builder.build_store(
-                var_global.as_pointer_value(),
-                generate_expression(var_value, builder, module)
+            var_global.set_initializer(
+                &generate_expression(var_value, builder, module)
                     .unwrap()
                     .as_basic_value_enum(),
             );
