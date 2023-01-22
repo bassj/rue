@@ -148,7 +148,7 @@ pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
 
     let print_function_signature = void_type.fn_type(&[i32_type.into()], false);
     let _external_print_function = module.add_function(
-        "rue_print",
+        "print",
         print_function_signature,
         Some(Linkage::AvailableExternally),
     );
