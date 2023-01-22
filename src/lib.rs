@@ -43,7 +43,10 @@ pub fn autosource() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let obj_dir = format!("{}/objs/", out_dir);
 
-    std::fs::create_dir(obj_dir.clone()).unwrap();
+    match std::fs::create_dir(obj_dir.clone()) {
+        Ok(()) => {},
+        Err(_) => {},
+    };
 
     let sources = _scan_for_sources("./src");
     let mut objs = vec![];
