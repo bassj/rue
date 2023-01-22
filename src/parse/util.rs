@@ -1,59 +1,69 @@
 use super::InputType;
 use nom::{error::ParseError, IResult, Parser};
 
+/// Eats whitespace before and after a parser.
+/// Will eat 0 or more tabs or spaces, does not eat newlines or carriage returns
 pub fn ws<'p, O, E: ParseError<InputType<'p>>, F>(
     f: F,
 ) -> impl FnMut(InputType<'p>) -> IResult<InputType<'p>, O, E>
 where
     F: Parser<InputType<'p>, O, E>,
 {
-    nom::sequence::delimited(
-        nom::character::complete::multispace0,
-        f,
-        nom::character::complete::multispace0,
-    )
+    let eat_whitespace = |i: InputType<'p>| {
+        nom::multi::many0(nom::branch::alt((
+            nom::character::complete::char(' '),
+            nom::character::complete::char('\t'),
+        )))(i)
+    };
+
+    nom::sequence::delimited(eat_whitespace, f, eat_whitespace)
 }
 
-#[test]
-fn test_ws() {
-    use crate::ast::Operator;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse::ParseError;
     use nom_locate::LocatedSpan;
 
-    let parser = super::atom::build_operator_parser(None);
+    #[test]
+    fn test_ws_eats() {
+        let inner_parser = nom::character::complete::alpha1::<InputType, crate::parse::ParseError>;
 
-    let (input, operator) = parser(LocatedSpan::new("    -")).unwrap();
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input string"
-    );
-    assert_eq!(
-        operator,
-        Operator::Subtract,
-        "Parser returned correct operator type"
-    );
+        let input = LocatedSpan::new("  test  ");
+        let (input, tag) = ws(inner_parser)(input).unwrap();
 
-    let (input, operator) = parser(LocatedSpan::new("    -     ")).unwrap();
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input string"
-    );
-    assert_eq!(
-        operator,
-        Operator::Subtract,
-        "Parser returned correct operator type"
-    );
+        assert_eq!(input.fragment(), &"", "parser returns correct input");
+        assert_eq!(tag.fragment(), &"test", "parser returns correct tag");
 
-    let (input, operator) = parser(LocatedSpan::new("       -         ")).unwrap();
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input string"
-    );
-    assert_eq!(
-        operator,
-        Operator::Subtract,
-        "Parser returned correct operator type"
-    );
+        let input = LocatedSpan::new("      test        ");
+        let (input, tag) = ws(inner_parser)(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "parser returns correct input");
+        assert_eq!(tag.fragment(), &"test", "parser returns correct tag");
+    }
+
+    #[test]
+    fn test_ws_doesnt_eat() {
+        let inner_parser = nom::character::complete::alpha1::<InputType, crate::parse::ParseError>;
+
+        let input = LocatedSpan::new("      test        \r\n");
+        let (input, tag) = ws(inner_parser)(input).unwrap();
+
+        assert_eq!(
+            input.fragment(),
+            &"\r\n",
+            "parser returns correct input"
+        );
+        assert_eq!(tag.fragment(), &"test", "parser returns correct tag");
+
+        let input = LocatedSpan::new("      test        \n");
+        let (input, tag) = ws(inner_parser)(input).unwrap();
+
+        assert_eq!(
+            input.fragment(),
+            &"\n",
+            "parser returns correct input"
+        );
+        assert_eq!(tag.fragment(), &"test", "parser returns correct tag");
+    }
 }
