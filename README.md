@@ -7,4 +7,5 @@ A productivity focused, general-purpose, programming language. Written in Rust, 
 
 ## Roadmap
  
- * [ ] Get the compiler to actually emit a binary.
+ * [X] Get the compiler to actually emit a binary.
+ * [ ] Create some sort of type system.
