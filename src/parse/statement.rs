@@ -37,11 +37,11 @@ fn parse_variable_declaration(input: InputType) -> IResult<(Statement, ErrorStac
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nom_locate::LocatedSpan;
 
     #[test]
     fn test_parse_variable_declaration() {
         use crate::ast::Expression;
-        use nom_locate::LocatedSpan;
 
         let input = LocatedSpan::new("let test = 10");
         let (input, (stmt, _error_stack)) = parse_variable_declaration(input).unwrap();
@@ -58,9 +58,29 @@ mod tests {
     #[test]
     fn test_parse_statement_variable_declaration() {
         use crate::ast::Expression;
-        use nom_locate::LocatedSpan;
 
         let input = LocatedSpan::new("let test = 10\nlet test2 = 10");
+        let (input, stmt) = parse_statement(input).unwrap();
+        
+        assert_eq!(input.fragment(), &"let test2 = 10", "Parser returns correct input");
+
+        assert_eq!(
+            stmt,
+            Statement::VariableDeclaration("test".to_string(), Expression::IntegerLiteral(10)),
+            "Parser parses correct statement"
+        );
+
+        let (input, stmt) = parse_statement(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            stmt,
+            Statement::VariableDeclaration("test2".to_string(), Expression::IntegerLiteral(10)),
+            "Parser parses correct statement"
+        );
+
+        let input = LocatedSpan::new("let test = 10\r\nlet test2 = 10");
         let (input, stmt) = parse_statement(input).unwrap();
         
         assert_eq!(input.fragment(), &"let test2 = 10", "Parser returns correct input");

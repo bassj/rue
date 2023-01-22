@@ -19,11 +19,17 @@ where
     nom::sequence::delimited(eat_whitespace, f, eat_whitespace)
 }
 
+fn parse_keyword(input: InputType) -> crate::parse::IResult<String> {
+    nom::combinator::map(nom::bytes::complete::tag("let"), |tag: InputType| {
+       tag.fragment().to_string() 
+    })(input)
+}
+
 pub fn parse_identifier(input: InputType) -> crate::parse::IResult<String> {
-    let (input, (first_part, second_part)) = nom::sequence::tuple((
+    let (input, ((), (first_part, second_part))) = nom::combinator::not(parse_keyword).and(nom::sequence::tuple((
         nom::bytes::complete::take_while1(|c: char| c.is_alphabetic() || c == '_'),
         nom::bytes::complete::take_while(|c: char| c.is_alphanumeric() || c == '_')
-    ))(input)?;
+    ))).parse(input)?;
 
     let mut function_name = first_part.to_string();
 
