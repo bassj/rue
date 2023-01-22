@@ -4,6 +4,7 @@ use std::env;
 
 pub mod ast;
 pub mod parse;
+pub mod types;
 pub mod codegen;
 
 #[derive(Debug)]

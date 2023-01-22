@@ -3,7 +3,7 @@
 
 use nom::Slice;
 
-use crate::ast::{Expression, Operator};
+use crate::{ast::{Expression, Operator}, types::RueInteger};
 
 use super::{error, util, IResult, InputType};
 
@@ -40,13 +40,17 @@ pub fn build_operator_parser(
     }
 }
 
+pub fn parse_literal(input: InputType) -> IResult<Expression> {
+    parse_integer_literal(input)
+}
+
 /// Attempts to parse an integer literal out of our input stream.
 pub fn parse_integer_literal(input: InputType) -> IResult<Expression> {
     nom::combinator::map_res(
         util::ws(nom::character::complete::digit1),
         |value: InputType| -> Result<Expression, Box<dyn std::error::Error>> {
             let value = value.parse::<i64>()?;
-            Ok(Expression::IntegerLiteral(value))
+            Ok(Expression::Literal(RueInteger::from(value).into()))
         },
     )(input)
 }
@@ -118,7 +122,7 @@ mod tests {
         let (input, expr) = parse_integer_literal(LocatedSpan::new("100")).unwrap();
         assert_eq!(
             expr,
-            Expression::IntegerLiteral(100),
+            Expression::Literal(RueInteger::from(100).into()),
             "Integer literal was correctly parsed"
         );
         assert_eq!(
@@ -130,7 +134,7 @@ mod tests {
         let (input, expr) = parse_integer_literal(LocatedSpan::new("0")).unwrap();
         assert_eq!(
             expr,
-            Expression::IntegerLiteral(0),
+            Expression::Literal(RueInteger::from(0).into()),
             "Integer literal was correctly parsed"
         );
         assert_eq!(
@@ -142,7 +146,7 @@ mod tests {
         let (input, expr) = parse_integer_literal(LocatedSpan::new("100 200")).unwrap();
         assert_eq!(
             expr,
-            Expression::IntegerLiteral(100),
+            Expression::Literal(RueInteger::from(100).into()),
             "Integer literal was correctly parsed"
         );
         assert_eq!(

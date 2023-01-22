@@ -1,4 +1,7 @@
-use crate::ast::{Expression, Operator, Statement};
+use crate::{
+    ast::{Expression, Operator, Statement},
+    types::RueValue,
+};
 use ar;
 use inkwell::{
     builder::Builder,
@@ -18,12 +21,31 @@ fn build_expr_into_const<'ctx>(
     module: &Module<'ctx>,
 ) -> BasicMetadataValueEnum<'ctx> {
     let context = module.get_context();
-    let i32_type = context.i32_type();
 
     let val = expr.compute_value();
-    let const_val = i32_type.const_int(val.try_into().unwrap(), false);
 
-    inkwell::values::BasicMetadataValueEnum::IntValue(const_val)
+    match val {
+        RueValue::Integer(int_val) => {
+            let const_type = match int_val.bit_width {
+                8 => context.i8_type(),
+                16 => context.i16_type(),
+                32 => context.i32_type(),
+                64 => context.i64_type(),
+                128 => context.i128_type(),
+                _ => unimplemented!(),
+            };
+
+            inkwell::values::BasicMetadataValueEnum::IntValue(
+                const_type
+                    .const_int_from_string(
+                        int_val.value.to_string().as_str(),
+                        inkwell::types::StringRadix::Decimal,
+                    )
+                    .unwrap(),
+            )
+        }
+        _ => unimplemented!(),
+    }
 }
 
 fn generate_expression<'ctx>(

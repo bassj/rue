@@ -36,6 +36,8 @@ fn parse_variable_declaration(input: InputType) -> IResult<(Statement, ErrorStac
 
 #[cfg(test)]
 mod tests {
+    use crate::types::RueInteger;
+
     use super::*;
     use nom_locate::LocatedSpan;
 
@@ -50,7 +52,7 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test".to_string(), Expression::IntegerLiteral(10)),
+            Statement::VariableDeclaration("test".to_string(), Expression::Literal(RueInteger::from(10).into())),
             "Parser parses correct statement"
         );
     }
@@ -66,7 +68,7 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test".to_string(), Expression::IntegerLiteral(10)),
+            Statement::VariableDeclaration("test".to_string(), Expression::Literal(RueInteger::from(10).into())),
             "Parser parses correct statement"
         );
 
@@ -76,7 +78,7 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test2".to_string(), Expression::IntegerLiteral(10)),
+            Statement::VariableDeclaration("test2".to_string(), Expression::Literal(RueInteger::from(10).into())),
             "Parser parses correct statement"
         );
 
@@ -87,7 +89,7 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test".to_string(), Expression::IntegerLiteral(10)),
+            Statement::VariableDeclaration("test".to_string(), Expression::Literal(RueInteger::from(10).into())),
             "Parser parses correct statement"
         );
 
@@ -97,7 +99,7 @@ mod tests {
 
         assert_eq!(
             stmt,
-            Statement::VariableDeclaration("test2".to_string(), Expression::IntegerLiteral(10)),
+            Statement::VariableDeclaration("test2".to_string(), Expression::Literal(RueInteger::from(10).into())),
             "Parser parses correct statement"
         );
     }

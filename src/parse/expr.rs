@@ -5,7 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use nom::Parser;
 
-use super::{atom, func, error::ErrorStack, util, IResult, InputType};
+use super::{atom, error::ErrorStack, func, util, IResult, InputType};
 
 use crate::ast::*;
 
@@ -18,174 +18,12 @@ pub fn parse_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
     parse_binary_operation_or_term(input)
 }
 
-#[test]
-pub fn test_parse_expression_function_invocation() {
-    use nom_locate::LocatedSpan;
-
-    let input = LocatedSpan::new("test_function()");
-    let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
-
-    assert_eq!(input.fragment(), &"", "Parser returns correct input");
-
-    assert_eq!(
-        expr,
-        Expression::FunctionInvocation(String::from("test_function"), Vec::new()),
-        "Parser parses correct expression"
-    );
-
-    let input = LocatedSpan::new("100 + test_function()");
-    let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
-
-    assert_eq!(input.fragment(), &"", "Parser returns correct input");
-
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::IntegerLiteral(100)),
-            Box::new(Expression::FunctionInvocation(
-                String::from("test_function"),
-                Vec::new()
-            ))
-        ),
-        "Parser parses correct expression"
-    );
-
-    let input = LocatedSpan::new("100 + test_function(200 + 300)");
-    let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
-
-    assert_eq!(input.fragment(), &"", "Parser returns correct input");
-
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::IntegerLiteral(100)),
-            Box::new(Expression::FunctionInvocation(
-                String::from("test_function"),
-                vec![Expression::BinaryOperation(
-                    Operator::Add,
-                    Box::new(Expression::IntegerLiteral(200)),
-                    Box::new(Expression::IntegerLiteral(300))
-                )]
-            ))
-        ),
-        "Parser parses correct expression"
-    );
-}
-
-#[test]
-pub fn test_parse_expression_error() {
-    use nom_locate::LocatedSpan;
-
-    let input = LocatedSpan::new("100 + ");
-    let result = parse_expression(input);
-    assert!(result.is_err(), "Result of parsing '100 + ' is an error.");
-
-    let err = match result.unwrap_err() {
-        nom::Err::Error(e) => e,
-        nom::Err::Failure(e) => e,
-        _ => panic!("Shouldn't be incomplete"),
-    };
-
-    let (short_message, long_message) = err.error_message();
-    assert_eq!(
-        short_message, "expected an expression",
-        "Error has correct short message"
-    );
-    assert_eq!(
-        long_message, "expected an expression, found ``",
-        "Error has correct long message"
-    );
-
-    let input = LocatedSpan::new("100 * ");
-    let result = parse_expression(input);
-    assert!(result.is_err(), "Result of parsing '100 * ' is an error.");
-
-    let err = match result.unwrap_err() {
-        nom::Err::Error(e) => e,
-        nom::Err::Failure(e) => e,
-        _ => panic!("Shouldn't be incomplete"),
-    };
-
-    let (short_message, long_message) = err.error_message();
-    assert_eq!(
-        short_message, "expected an expression",
-        "Error has correct short message"
-    );
-    assert_eq!(
-        long_message, "expected an expression, found ``",
-        "Error has correct long message"
-    );
-
-    let input = LocatedSpan::new("(100 + 100) *");
-    let result = parse_expression(input);
-    assert!(result.is_err(), "Result is an error.");
-
-    let err = match result.unwrap_err() {
-        nom::Err::Error(e) => e,
-        nom::Err::Failure(e) => e,
-        _ => panic!("Shouldn't be incomplete"),
-    };
-
-    let (short_message, long_message) = err.error_message();
-    assert_eq!(
-        short_message, "expected an expression",
-        "Error has correct short message"
-    );
-    assert_eq!(
-        long_message, "expected an expression, found ``",
-        "Error has correct long message"
-    );
-}
-
 fn parse_nested_expression(input: InputType) -> IResult<(Expression, ErrorStack)> {
     util::ws(nom_preserve::sequence::delimited(
         nom::character::complete::char('('),
         parse_expression,
         nom::character::complete::char(')'),
     ))(input)
-}
-
-#[test]
-fn test_parse_nested_expression() {
-    use nom_locate::LocatedSpan;
-
-    let (input, (expr, _)) = parse_nested_expression(LocatedSpan::new("( 100 + 201 )")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::IntegerLiteral(100)),
-            Box::new(Expression::IntegerLiteral(201))
-        )
-    );
-    assert_eq!(input.fragment(), &"");
-}
-
-#[test]
-fn test_parse_nested_expression_error() {
-    use nom_locate::LocatedSpan;
-
-    let res = parse_nested_expression(LocatedSpan::new("( 100 "));
-    assert!(
-        res.is_err(),
-        "Parsing invalid nested expression returned an error"
-    );
-    let err = match res.unwrap_err() {
-        nom::Err::Error(e) => e,
-        nom::Err::Failure(e) => e,
-        _ => panic!("Shouldn't be incomplete"),
-    };
-
-    let (short_message, long_message) = err.error_message();
-
-    assert_eq!(short_message, "expected `)`", "Error has correct message");
-
-    assert_eq!(
-        long_message, "expected either `)` or an operator, found ``",
-        "Error has correct message"
-    );
 }
 
 /// Attempts to parse either a binary operation or single term from the input.
@@ -217,7 +55,7 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
                     )(input)
                 } else {
                     nom::branch::alt((
-                        atom::parse_integer_literal,
+                        atom::parse_literal,
                         parse_nested_expression.map(|(expr, nested_err_stack)| {
                             error_stack.borrow_mut().extend(nested_err_stack);
                             expr
@@ -275,87 +113,257 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
     res.map(|(i, expr)| (i, (expr, error_stack)))
 }
 
-#[test]
-fn test_parse_binary_operation() {
-    use nom_locate::LocatedSpan;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::RueInteger;
 
-    // Test parsing simple addition
-    let (input, (expr, _)) = parse_binary_operation_or_term(LocatedSpan::new("100+201")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::IntegerLiteral(100)),
-            Box::new(Expression::IntegerLiteral(201))
-        )
-    );
-    assert_eq!(input.fragment(), &"");
-    // Test with three terms
-    let (input, (expr, _)) =
-        parse_binary_operation_or_term(LocatedSpan::new("100+200+300")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::BinaryOperation(
-                Operator::Add,
-                Box::new(Expression::IntegerLiteral(100)),
-                Box::new(Expression::IntegerLiteral(200))
-            )),
-            Box::new(Expression::IntegerLiteral(300)),
-        )
-    );
-    assert_eq!(input.fragment(), &"");
-    // Test order of operations, with operators of the same precedence.
-    let (input, (expr, _)) =
-        parse_binary_operation_or_term(LocatedSpan::new("100-101+200")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::BinaryOperation(
-                Operator::Subtract,
-                Box::new(Expression::IntegerLiteral(100)),
-                Box::new(Expression::IntegerLiteral(101)),
-            )),
-            Box::new(Expression::IntegerLiteral(200)),
-        )
-    );
-    assert_eq!(input.fragment(), &"");
-    // Test order of operations with operators of different precedence
-    let (input, (expr, _)) =
-        parse_binary_operation_or_term(LocatedSpan::new("100/2+300/4")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Add,
-            Box::new(Expression::BinaryOperation(
-                Operator::Divide,
-                Box::new(Expression::IntegerLiteral(100)),
-                Box::new(Expression::IntegerLiteral(2))
-            )),
-            Box::new(Expression::BinaryOperation(
-                Operator::Divide,
-                Box::new(Expression::IntegerLiteral(300)),
-                Box::new(Expression::IntegerLiteral(4))
-            ))
-        )
-    );
-    assert_eq!(input.fragment(), &"");
+    #[test]
+    pub fn test_parse_expression_function_invocation() {
+        use nom_locate::LocatedSpan;
 
-    let (input, (expr, _)) =
-        parse_binary_operation_or_term(LocatedSpan::new("10 * (100 + 201)")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::BinaryOperation(
-            Operator::Multiply,
-            Box::new(Expression::IntegerLiteral(10)),
-            Box::new(Expression::BinaryOperation(
+        let input = LocatedSpan::new("test_function()");
+        let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            expr,
+            Expression::FunctionInvocation(String::from("test_function"), Vec::new()),
+            "Parser parses correct expression"
+        );
+
+        let input = LocatedSpan::new("100 + test_function()");
+        let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
                 Operator::Add,
-                Box::new(Expression::IntegerLiteral(100)),
-                Box::new(Expression::IntegerLiteral(201))
-            )),
-        ),
-    );
-    assert_eq!(input.fragment(), &"");
+                Box::new(Expression::Literal(RueInteger::from(100).into())),
+                Box::new(Expression::FunctionInvocation(
+                    String::from("test_function"),
+                    Vec::new()
+                ))
+            ),
+            "Parser parses correct expression"
+        );
+
+        let input = LocatedSpan::new("100 + test_function(200 + 300)");
+        let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Add,
+                Box::new(Expression::Literal(RueInteger::from(100).into())),
+                Box::new(Expression::FunctionInvocation(
+                    String::from("test_function"),
+                    vec![Expression::BinaryOperation(
+                        Operator::Add,
+                        Box::new(Expression::Literal(RueInteger::from(200).into())),
+                        Box::new(Expression::Literal(RueInteger::from(300).into()))
+                    )]
+                ))
+            ),
+            "Parser parses correct expression"
+        );
+    }
+
+    #[test]
+    pub fn test_parse_expression_error() {
+        use nom_locate::LocatedSpan;
+
+        let input = LocatedSpan::new("100 + ");
+        let result = parse_expression(input);
+        assert!(result.is_err(), "Result of parsing '100 + ' is an error.");
+
+        let err = match result.unwrap_err() {
+            nom::Err::Error(e) => e,
+            nom::Err::Failure(e) => e,
+            _ => panic!("Shouldn't be incomplete"),
+        };
+
+        let (short_message, long_message) = err.error_message();
+        assert_eq!(
+            short_message, "expected an expression",
+            "Error has correct short message"
+        );
+        assert_eq!(
+            long_message, "expected an expression, found ``",
+            "Error has correct long message"
+        );
+
+        let input = LocatedSpan::new("100 * ");
+        let result = parse_expression(input);
+        assert!(result.is_err(), "Result of parsing '100 * ' is an error.");
+
+        let err = match result.unwrap_err() {
+            nom::Err::Error(e) => e,
+            nom::Err::Failure(e) => e,
+            _ => panic!("Shouldn't be incomplete"),
+        };
+
+        let (short_message, long_message) = err.error_message();
+        assert_eq!(
+            short_message, "expected an expression",
+            "Error has correct short message"
+        );
+        assert_eq!(
+            long_message, "expected an expression, found ``",
+            "Error has correct long message"
+        );
+
+        let input = LocatedSpan::new("(100 + 100) *");
+        let result = parse_expression(input);
+        assert!(result.is_err(), "Result is an error.");
+
+        let err = match result.unwrap_err() {
+            nom::Err::Error(e) => e,
+            nom::Err::Failure(e) => e,
+            _ => panic!("Shouldn't be incomplete"),
+        };
+
+        let (short_message, long_message) = err.error_message();
+        assert_eq!(
+            short_message, "expected an expression",
+            "Error has correct short message"
+        );
+        assert_eq!(
+            long_message, "expected an expression, found ``",
+            "Error has correct long message"
+        );
+    }
+
+    #[test]
+    fn test_parse_nested_expression() {
+        use nom_locate::LocatedSpan;
+
+        let (input, (expr, _)) =
+            parse_nested_expression(LocatedSpan::new("( 100 + 201 )")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Add,
+                Box::new(Expression::Literal(RueInteger::from(100).into())),
+                Box::new(Expression::Literal(RueInteger::from(201).into()))
+            )
+        );
+        assert_eq!(input.fragment(), &"");
+    }
+
+    #[test]
+    fn test_parse_nested_expression_error() {
+        use nom_locate::LocatedSpan;
+
+        let res = parse_nested_expression(LocatedSpan::new("( 100 "));
+        assert!(
+            res.is_err(),
+            "Parsing invalid nested expression returned an error"
+        );
+        let err = match res.unwrap_err() {
+            nom::Err::Error(e) => e,
+            nom::Err::Failure(e) => e,
+            _ => panic!("Shouldn't be incomplete"),
+        };
+
+        let (short_message, long_message) = err.error_message();
+
+        assert_eq!(short_message, "expected `)`", "Error has correct message");
+
+        assert_eq!(
+            long_message, "expected either `)` or an operator, found ``",
+            "Error has correct message"
+        );
+    }
+
+    #[test]
+    fn test_parse_binary_operation() {
+        use nom_locate::LocatedSpan;
+
+        // Test parsing simple addition
+        let (input, (expr, _)) =
+            parse_binary_operation_or_term(LocatedSpan::new("100+201")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Add,
+                Box::new(Expression::Literal(RueInteger::from(100).into())),
+                Box::new(Expression::Literal(RueInteger::from(201).into()))
+            )
+        );
+        assert_eq!(input.fragment(), &"");
+        // Test with three terms
+        let (input, (expr, _)) =
+            parse_binary_operation_or_term(LocatedSpan::new("100+200+300")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Add,
+                Box::new(Expression::BinaryOperation(
+                    Operator::Add,
+                    Box::new(Expression::Literal(RueInteger::from(100).into())),
+                    Box::new(Expression::Literal(RueInteger::from(200).into()))
+                )),
+                Box::new(Expression::Literal(RueInteger::from(300).into())),
+            )
+        );
+        assert_eq!(input.fragment(), &"");
+        // Test order of operations, with operators of the same precedence.
+        let (input, (expr, _)) =
+            parse_binary_operation_or_term(LocatedSpan::new("100-101+200")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Add,
+                Box::new(Expression::BinaryOperation(
+                    Operator::Subtract,
+                    Box::new(Expression::Literal(RueInteger::from(100).into())),
+                    Box::new(Expression::Literal(RueInteger::from(101).into())),
+                )),
+                Box::new(Expression::Literal(RueInteger::from(200).into())),
+            )
+        );
+        assert_eq!(input.fragment(), &"");
+        // Test order of operations with operators of different precedence
+        let (input, (expr, _)) =
+            parse_binary_operation_or_term(LocatedSpan::new("100/2+300/4")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Add,
+                Box::new(Expression::BinaryOperation(
+                    Operator::Divide,
+                    Box::new(Expression::Literal(RueInteger::from(100).into())),
+                    Box::new(Expression::Literal(RueInteger::from(2).into()))
+                )),
+                Box::new(Expression::BinaryOperation(
+                    Operator::Divide,
+                    Box::new(Expression::Literal(RueInteger::from(300).into())),
+                    Box::new(Expression::Literal(RueInteger::from(4).into()))
+                ))
+            )
+        );
+        assert_eq!(input.fragment(), &"");
+
+        let (input, (expr, _)) =
+            parse_binary_operation_or_term(LocatedSpan::new("10 * (100 + 201)")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::BinaryOperation(
+                Operator::Multiply,
+                Box::new(Expression::Literal(RueInteger::from(10).into())),
+                Box::new(Expression::BinaryOperation(
+                    Operator::Add,
+                    Box::new(Expression::Literal(RueInteger::from(100).into())),
+                    Box::new(Expression::Literal(RueInteger::from(201).into()))
+                )),
+            ),
+        );
+        assert_eq!(input.fragment(), &"");
+    }
 }

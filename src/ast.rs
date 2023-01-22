@@ -1,3 +1,5 @@
+use crate::types::RueValue;
+
 #[derive(Debug, PartialEq)]
 pub enum Statement {
     VariableDeclaration(String, Expression),
@@ -7,10 +9,10 @@ pub enum Statement {
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     FunctionInvocation(String, Vec<Expression>),
-    IntegerLiteral(i64),
+    Literal(RueValue),
     Variable(String),
     BinaryOperation(Operator, Box<Expression>, Box<Expression>),
-    NoOp
+    NoOp,
 }
 impl Expression {
     /// returns true if this expression represents a constant value
@@ -18,25 +20,23 @@ impl Expression {
         match self {
             Self::FunctionInvocation(_, _) => false,
             Self::Variable(_) => false,
-            Self::BinaryOperation(_, lhs, rhs) => { lhs.is_constant() && rhs.is_constant() },
+            Self::BinaryOperation(_, lhs, rhs) => lhs.is_constant() && rhs.is_constant(),
             _ => true,
-        } 
+        }
     }
 
     /// compute the value of this expression.
     /// Panics if the expression is not constant
-    pub fn compute_value(self) -> i64 {
+    pub fn compute_value(self) -> RueValue {
         match self {
-            Self::BinaryOperation(op, lhs, rhs) => { 
-                evaulate_expression(
-                    Expression::BinaryOperation(op, lhs, rhs)
-                )
-            },
-            Self::IntegerLiteral(val) => {
-                val
+            Self::BinaryOperation(op, lhs, rhs) => {
+                evaulate_expression(Expression::BinaryOperation(op, lhs, rhs))
+            }
+            Self::Literal(rue_val) => {
+                rue_val
             }
             _ => panic!("Attempting to compute constant from non-constant value"),
-        } 
+        }
     }
 }
 
@@ -51,12 +51,12 @@ pub enum Operator {
     Add,
     Subtract,
     Multiply,
-    Divide
+    Divide,
 }
 
 static PRECEDENCE_LEVELS: &'static [&'static [Operator]] = &[
     &[Operator::Add, Operator::Subtract],
-    &[Operator::Multiply, Operator::Divide]
+    &[Operator::Multiply, Operator::Divide],
 ];
 
 impl Operator {
@@ -90,20 +90,21 @@ impl std::convert::From<&Operator> for char {
     }
 }
 
-fn evaulate_expression(expr: Expression) -> i64 {
+fn evaulate_expression(expr: Expression) -> RueValue {
     match expr {
-        Expression::IntegerLiteral(i) => i,
-        Expression::NoOp => 0,
+        Expression::Literal(value) => value,
         Expression::BinaryOperation(op, lhs, rhs) => {
             let lhs = evaulate_expression(*lhs);
             let rhs = evaulate_expression(*rhs);
+
+            // TODO: proper type error system
             match op {
-                Operator::Add => { lhs + rhs },
-                Operator::Subtract => { lhs - rhs },
-                Operator::Multiply => { lhs * rhs },
-                Operator::Divide => { lhs / rhs },
+                Operator::Add => RueValue::try_add(lhs, rhs).expect("Type error trying to operate on values"),
+                Operator::Subtract => RueValue::try_sub(lhs, rhs).expect("Type error trying to operate on values"),
+                Operator::Multiply => RueValue::try_mul(lhs, rhs).expect("Type error trying to operate on values"),
+                Operator::Divide => RueValue::try_div(lhs, rhs).expect("Type error trying to operate on values"),
             }
-        },
+        }
         _ => unimplemented!(),
     }
 }
