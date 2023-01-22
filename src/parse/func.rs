@@ -2,86 +2,6 @@ use crate::ast::Expression;
 
 use super::{InputType, IResult};
 
-fn parse_function_name(input: InputType) -> IResult<String> {
-    let (input, (first_part, second_part)) = nom::sequence::tuple((
-        nom::bytes::complete::take_while1(|c: char| c.is_alphabetic() || c == '_'),
-        nom::bytes::complete::take_while(|c: char| c.is_alphanumeric() || c == '_')
-    ))(input)?;
-
-    let mut function_name = first_part.to_string();
-
-    function_name.extend(second_part.chars());
-
-    Ok((input, function_name))
-}
-
-#[test]
-fn test_parse_function_name() {
-    use nom_locate::LocatedSpan;
-
-    let input = LocatedSpan::new("test_function()");
-    let (input, func_name) = parse_function_name(input).unwrap();
-
-    assert_eq!(
-        input.fragment(),
-        &"()",
-        "Correctly parsed the full function name"
-    );
-
-    assert_eq!(
-        &func_name,
-        &"test_function",
-        "Parser returned the correct function name"
-    );
-
-    let input = LocatedSpan::new("test_function1()");
-    let (input, func_name) = parse_function_name(input).unwrap();
-
-    assert_eq!(
-        input.fragment(),
-        &"()",
-        "Correctly parsed the full function name"
-    );
-
-    assert_eq!(
-        &func_name,
-        &"test_function1",
-        "Parser returned the correct function name"
-    );
-
-
-    let input = LocatedSpan::new("test1_function()");
-    let (input, func_name) = parse_function_name(input).unwrap();
-
-    assert_eq!(
-        input.fragment(),
-        &"()",
-        "Correctly parsed the full function name"
-    );
-
-    assert_eq!(
-        &func_name,
-        &"test1_function",
-        "Parser returned the correct function name"
-    );
-
-
-    let input = LocatedSpan::new("_test()");
-    let (input, func_name) = parse_function_name(input).unwrap();
-
-    assert_eq!(
-        input.fragment(),
-        &"()",
-        "Correctly parsed the full function name"
-    );
-
-    assert_eq!(
-        &func_name,
-        &"_test",
-        "Parser returned the correct function name"
-    );
-}
-
 fn parse_function_arguments(input: InputType) -> IResult<Vec<Expression>> {
     nom::sequence::delimited(
         nom::character::complete::char('('),
@@ -135,7 +55,7 @@ fn test_parse_function_arguments() {
 
 pub fn parse_function_invocation(input: InputType) -> IResult<Expression> {
     nom::combinator::map(
-        nom::sequence::tuple((parse_function_name, parse_function_arguments)),
+        nom::sequence::tuple((util::parse_identifier, parse_function_arguments)),
         |(func_name, func_args)| Expression::FunctionInvocation(func_name, func_args),
     )(input)
 }
