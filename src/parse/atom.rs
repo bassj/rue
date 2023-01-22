@@ -40,58 +40,6 @@ pub fn build_operator_parser(
     }
 }
 
-#[test]
-fn test_parse_operator() {
-    use nom_locate::LocatedSpan;
-
-    let addition_parser = build_operator_parser(Some(&[Operator::Add]));
-
-    let (input, operator) = addition_parser(LocatedSpan::new("+")).unwrap();
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input string"
-    );
-    assert_eq!(
-        operator,
-        Operator::Add,
-        "Parser returned correct operator type"
-    );
-
-    let result = addition_parser(LocatedSpan::new("-"));
-    assert!(
-        result.is_err(),
-        "Addition parser returns an error trying to parse '-'"
-    );
-
-    let addition_subtraction_parser =
-        build_operator_parser(Some(&[Operator::Add, Operator::Subtract]));
-
-    let (input, operator) = addition_parser(LocatedSpan::new("+")).unwrap();
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input string"
-    );
-    assert_eq!(
-        operator,
-        Operator::Add,
-        "Parser returned correct operator type"
-    );
-
-    let (input, operator) = addition_subtraction_parser(LocatedSpan::new("-")).unwrap();
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input string"
-    );
-    assert_eq!(
-        operator,
-        Operator::Subtract,
-        "Parser returned correct operator type"
-    );
-}
-
 /// Attempts to parse an integer literal out of our input stream.
 pub fn parse_integer_literal(input: InputType) -> IResult<Expression> {
     nom::combinator::map_res(
@@ -103,49 +51,127 @@ pub fn parse_integer_literal(input: InputType) -> IResult<Expression> {
     )(input)
 }
 
-#[test]
-fn test_parse_integer_literal() {
+pub fn parse_variable_get(input: InputType) -> IResult<Expression> {
+    nom::combinator::map(util::parse_identifier, |var_name| {
+        Expression::Variable(var_name)
+    })(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse::atom::parse_variable_get;
     use nom_locate::LocatedSpan;
 
-    let (input, expr) = parse_integer_literal(LocatedSpan::new("100")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::IntegerLiteral(100),
-        "Integer literal was correctly parsed"
-    );
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Integer literal was removed from input"
-    );
+    #[test]
+    fn test_parse_operator() {
+        let addition_parser = build_operator_parser(Some(&[Operator::Add]));
 
-    let (input, expr) = parse_integer_literal(LocatedSpan::new("0")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::IntegerLiteral(0),
-        "Integer literal was correctly parsed"
-    );
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Integer literal was removed from input"
-    );
+        let (input, operator) = addition_parser(LocatedSpan::new("+")).unwrap();
+        assert_eq!(
+            input.fragment(),
+            &"",
+            "Parser returned correct input string"
+        );
+        assert_eq!(
+            operator,
+            Operator::Add,
+            "Parser returned correct operator type"
+        );
 
-    let (input, expr) = parse_integer_literal(LocatedSpan::new("100 200")).unwrap();
-    assert_eq!(
-        expr,
-        Expression::IntegerLiteral(100),
-        "Integer literal was correctly parsed"
-    );
-    assert_eq!(
-        input.fragment(),
-        &"200",
-        "Integer literal was removed from input"
-    );
+        let result = addition_parser(LocatedSpan::new("-"));
+        assert!(
+            result.is_err(),
+            "Addition parser returns an error trying to parse '-'"
+        );
 
-    let res = parse_integer_literal(LocatedSpan::new("not an int"));
-    assert!(res.is_err(), "Trying to parse non-operator causes error");
+        let addition_subtraction_parser =
+            build_operator_parser(Some(&[Operator::Add, Operator::Subtract]));
 
-    let res = parse_integer_literal(LocatedSpan::new(""));
-    assert!(res.is_err(), "Failing to parse empty string causes error");
+        let (input, operator) = addition_parser(LocatedSpan::new("+")).unwrap();
+        assert_eq!(
+            input.fragment(),
+            &"",
+            "Parser returned correct input string"
+        );
+        assert_eq!(
+            operator,
+            Operator::Add,
+            "Parser returned correct operator type"
+        );
+
+        let (input, operator) = addition_subtraction_parser(LocatedSpan::new("-")).unwrap();
+        assert_eq!(
+            input.fragment(),
+            &"",
+            "Parser returned correct input string"
+        );
+        assert_eq!(
+            operator,
+            Operator::Subtract,
+            "Parser returned correct operator type"
+        );
+    }
+
+    #[test]
+    fn test_parse_integer_literal() {
+        let (input, expr) = parse_integer_literal(LocatedSpan::new("100")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::IntegerLiteral(100),
+            "Integer literal was correctly parsed"
+        );
+        assert_eq!(
+            input.fragment(),
+            &"",
+            "Integer literal was removed from input"
+        );
+
+        let (input, expr) = parse_integer_literal(LocatedSpan::new("0")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::IntegerLiteral(0),
+            "Integer literal was correctly parsed"
+        );
+        assert_eq!(
+            input.fragment(),
+            &"",
+            "Integer literal was removed from input"
+        );
+
+        let (input, expr) = parse_integer_literal(LocatedSpan::new("100 200")).unwrap();
+        assert_eq!(
+            expr,
+            Expression::IntegerLiteral(100),
+            "Integer literal was correctly parsed"
+        );
+        assert_eq!(
+            input.fragment(),
+            &"200",
+            "Integer literal was removed from input"
+        );
+
+        let res = parse_integer_literal(LocatedSpan::new("not an int"));
+        assert!(res.is_err(), "Trying to parse non-operator causes error");
+
+        let res = parse_integer_literal(LocatedSpan::new(""));
+        assert!(res.is_err(), "Failing to parse empty string causes error");
+    }
+
+    #[test]
+    fn test_parse_variable_get() {
+        let (input, expr) = parse_variable_get(LocatedSpan::new("test_var")).unwrap();
+
+        assert_eq!(
+            expr,
+            Expression::Variable(String::from("test_var")),
+            "Variable get was correctly parsed"
+        );
+
+        assert_eq!(
+            input.fragment(),
+            &"",
+            "variable was removed from input"
+        );
+    }
 }

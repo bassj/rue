@@ -1,15 +1,15 @@
 mod atom;
 mod error;
 mod expr;
-mod util;
 mod func;
 mod statement;
+mod util;
 
 use nom::Err;
 
 use nom_locate::LocatedSpan;
 
-use crate::ast::{self, Expression};
+use crate::ast;
 
 use error::ParseError;
 
@@ -21,9 +21,7 @@ pub fn parse_source<'s, T: Into<&'s str>>(input: T) -> Result<Vec<ast::Statement
     let src_string = input.into();
     let src = LocatedSpan::new(src_string.as_ref());
 
-    let res = nom::combinator::all_consuming(
-        nom::multi::many0(statement::parse_statement)
-    )(src);
+    let res = nom::combinator::all_consuming(nom::multi::many0(statement::parse_statement))(src);
 
     match res {
         Ok((_, stmt)) => Ok(stmt),

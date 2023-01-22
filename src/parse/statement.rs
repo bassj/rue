@@ -36,6 +36,8 @@ fn parse_variable_declaration(input: InputType) -> IResult<(Statement, ErrorStac
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_parse_variable_declaration() {
         use crate::ast::Expression;

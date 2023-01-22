@@ -1,6 +1,5 @@
 use super::InputType;
 use nom::{error::ParseError, IResult, Parser};
-use nom_locate::LocatedSpan;
 
 /// Eats whitespace before and after a parser.
 /// Will eat 0 or more tabs or spaces, does not eat newlines or carriage returns
@@ -20,7 +19,7 @@ where
     nom::sequence::delimited(eat_whitespace, f, eat_whitespace)
 }
 
-pub fn parse_identifier(input: InputType) -> IResult<String> {
+pub fn parse_identifier(input: InputType) -> crate::parse::IResult<String> {
     let (input, (first_part, second_part)) = nom::sequence::tuple((
         nom::bytes::complete::take_while1(|c: char| c.is_alphabetic() || c == '_'),
         nom::bytes::complete::take_while(|c: char| c.is_alphanumeric() || c == '_')
@@ -36,7 +35,6 @@ pub fn parse_identifier(input: InputType) -> IResult<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse::ParseError;
     use nom_locate::LocatedSpan;
 
     #[test]
@@ -86,7 +84,7 @@ mod tests {
         use nom_locate::LocatedSpan;
 
         let input = LocatedSpan::new("test_function()");
-        let (input, func_name) = parse_function_name(input).unwrap();
+        let (input, func_name) = parse_identifier(input).unwrap();
 
         assert_eq!(
             input.fragment(),
@@ -101,7 +99,7 @@ mod tests {
         );
 
         let input = LocatedSpan::new("test_function1()");
-        let (input, func_name) = parse_function_name(input).unwrap();
+        let (input, func_name) = parse_identifier(input).unwrap();
 
         assert_eq!(
             input.fragment(),
@@ -117,7 +115,7 @@ mod tests {
 
 
         let input = LocatedSpan::new("test1_function()");
-        let (input, func_name) = parse_function_name(input).unwrap();
+        let (input, func_name) = parse_identifier(input).unwrap();
 
         assert_eq!(
             input.fragment(),
@@ -133,7 +131,7 @@ mod tests {
 
 
         let input = LocatedSpan::new("_test()");
-        let (input, func_name) = parse_function_name(input).unwrap();
+        let (input, func_name) = parse_identifier(input).unwrap();
 
         assert_eq!(
             input.fragment(),

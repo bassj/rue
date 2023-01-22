@@ -223,6 +223,7 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
                             expr
                         }),
                         func::parse_function_invocation,
+                        atom::parse_variable_get,
                     ))(input)
                 }
             };

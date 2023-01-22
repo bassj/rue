@@ -1,7 +1,14 @@
 #[derive(Debug, PartialEq)]
+pub enum Statement {
+    VariableDeclaration(String, Expression),
+    Expression(Expression),
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Expression {
     FunctionInvocation(String, Vec<Expression>),
     IntegerLiteral(i64),
+    Variable(String),
     BinaryOperation(Operator, Box<Expression>, Box<Expression>),
     NoOp
 }
@@ -10,7 +17,8 @@ impl Expression {
     pub fn is_constant(&self) -> bool {
         match self {
             Self::FunctionInvocation(_, _) => false,
-            Self::BinaryOperation(_, lhs, rhs) => { lhs.is_constant() && rhs.is_constant() }
+            Self::Variable(_) => false,
+            Self::BinaryOperation(_, lhs, rhs) => { lhs.is_constant() && rhs.is_constant() },
             _ => true,
         } 
     }

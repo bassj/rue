@@ -1,6 +1,6 @@
 use crate::ast::Expression;
 
-use super::{InputType, IResult};
+use super::{util::parse_identifier, IResult, InputType};
 
 fn parse_function_arguments(input: InputType) -> IResult<Vec<Expression>> {
     nom::sequence::delimited(
@@ -15,16 +15,12 @@ fn parse_function_arguments(input: InputType) -> IResult<Vec<Expression>> {
 
 #[test]
 fn test_parse_function_arguments() {
-    use nom_locate::LocatedSpan;    
+    use nom_locate::LocatedSpan;
 
     let input = LocatedSpan::new("()");
     let (input, func_args) = parse_function_arguments(input).unwrap();
 
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input"
-    );
+    assert_eq!(input.fragment(), &"", "Parser returned correct input");
 
     assert_eq!(
         func_args,
@@ -35,11 +31,7 @@ fn test_parse_function_arguments() {
     let input = LocatedSpan::new("( 1 , 2 , 3 , 4 )");
     let (input, func_args) = parse_function_arguments(input).unwrap();
 
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned correct input"
-    );
+    assert_eq!(input.fragment(), &"", "Parser returned correct input");
 
     assert_eq!(
         func_args,
@@ -55,23 +47,19 @@ fn test_parse_function_arguments() {
 
 pub fn parse_function_invocation(input: InputType) -> IResult<Expression> {
     nom::combinator::map(
-        nom::sequence::tuple((util::parse_identifier, parse_function_arguments)),
+        nom::sequence::tuple((parse_identifier, parse_function_arguments)),
         |(func_name, func_args)| Expression::FunctionInvocation(func_name, func_args),
     )(input)
 }
 
 #[test]
 pub fn test_parse_function_invocation() {
-    use nom_locate::LocatedSpan;    
+    use nom_locate::LocatedSpan;
 
     let input = LocatedSpan::new("test_function()");
     let (input, func_invoc) = parse_function_invocation(input).unwrap();
 
-    assert_eq!(
-        input.fragment(),
-        &"",
-        "Parser returned the correct input"
-    );
+    assert_eq!(input.fragment(), &"", "Parser returned the correct input");
 
     assert_eq!(
         func_invoc,
