@@ -1,55 +1,142 @@
-use crate::ast::Expression;
-use inkwell::{context::Context, targets::*, OptimizationLevel, module::*, builder::Builder, values::BasicMetadataValueEnum};
-use std::path::Path;
+use crate::ast::{Expression, Operator, Statement};
 use ar;
-use std::fs::File;
+use inkwell::{
+    builder::Builder,
+    context::Context,
+    module::*,
+    targets::*,
+    values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum},
+    OptimizationLevel,
+};
 use std::ffi::OsStr;
+use std::fs::File;
+use std::path::Path;
 
-fn build_expr_into_value<'ctx>(expr: Expression, builder: &Builder, module: &Module<'ctx>) -> BasicMetadataValueEnum<'ctx> {
+fn build_expr_into_const<'ctx>(
+    expr: Expression,
+    _builder: &Builder,
+    module: &Module<'ctx>,
+) -> BasicMetadataValueEnum<'ctx> {
     let context = module.get_context();
-    let is_constant = expr.is_constant();
-
     let i32_type = context.i32_type();
 
-    if is_constant {
-        let val = expr.compute_value();
-        let const_val = i32_type.const_int(val.try_into().unwrap(), false);
+    let val = expr.compute_value();
+    let const_val = i32_type.const_int(val.try_into().unwrap(), false);
 
-        inkwell::values::BasicMetadataValueEnum::IntValue(const_val)
-    } else {
-        todo!()
-    }
+    inkwell::values::BasicMetadataValueEnum::IntValue(const_val)
 }
 
-fn generate_expression<'ctx>(expr: Expression, builder: &Builder, module: &Module<'ctx>) {
+fn generate_expression<'ctx>(
+    expr: Expression,
+    builder: &Builder<'ctx>,
+    module: &Module<'ctx>,
+) -> Option<Box<dyn BasicValue<'ctx> + 'ctx>> {
     match expr {
         Expression::FunctionInvocation(func_name, func_args) => {
-            let func_val = module.get_function(func_name.as_str()).expect(format!("Cannot find function '{}'", func_name).as_str());
+            let func_val = module
+                .get_function(func_name.as_str())
+                .expect(format!("Cannot find function '{}'", func_name).as_str());
 
-            // let func_args: Vec<BasicMetadataValueEnum> = func_args.into_iter().map(|arg| build_expr_into_value(arg, builder, module)).collect();
             let mut arg_values = Vec::with_capacity(func_args.len());
 
             for arg in func_args {
-                
-                let arg_val = build_expr_into_value(arg, builder, module);
-
-                arg_values.push(arg_val);
+                if arg.is_constant() {
+                    let arg_val = build_expr_into_const(arg, builder, module);
+                    arg_values.push(arg_val);
+                } else {
+                    if let Some(arg_val) = generate_expression(arg, builder, module) {
+                        let arg_val = arg_val.as_basic_value_enum();
+                        arg_values.push(arg_val.into());
+                    } else {
+                        panic!("Cannot use void type as function parameter");
+                        // TODO: proper error handling for codegen errors.
+                    }
+                }
             }
 
-            builder.build_call(
-                func_val,
-                &arg_values, 
-                func_name.as_str()
-            );
-        }, 
-        _ => todo!()
+            if let Some(left) = builder
+                .build_call(func_val, arg_values.as_slice(), func_name.as_str())
+                .try_as_basic_value()
+                .left()
+            {
+                let b: Box<dyn BasicValue<'ctx>> = Box::new(left);
+                Some(b)
+            } else {
+                None
+            }
+        }
+        Expression::BinaryOperation(op, lhs, rhs) => {
+            let expr = Expression::BinaryOperation(op, lhs, rhs);
+
+            if expr.is_constant() {
+                let val = build_expr_into_const(expr, builder, module);
+                Some(Box::new(
+                    BasicValueEnum::try_from(val).unwrap(),
+                ))
+            } else {
+                match expr {
+                    Expression::BinaryOperation(op, lhs, rhs) => {
+                        let lhs = generate_expression(*lhs, builder, module)
+                            .expect("trying to use void type in operation")
+                            .as_basic_value_enum()
+                            .into_int_value();
+                        let rhs = generate_expression(*rhs, builder, module)
+                            .expect("trying to use void type in operation")
+                            .as_basic_value_enum()
+                            .into_int_value();
+
+                        let op_val = match op {
+                            Operator::Add => builder.build_int_add(lhs, rhs, "integer addition"),
+                            Operator::Subtract => {
+                                builder.build_int_sub(lhs, rhs, "integer subtraction")
+                            }
+                            Operator::Divide => {
+                                builder.build_int_signed_div(lhs, rhs, "integer division")
+                            }
+                            Operator::Multiply => {
+                                builder.build_int_mul(lhs, rhs, "integer multiplication")
+                            }
+                        };
+
+                        Some(Box::new(op_val.as_basic_value_enum()))
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+        },
+        Expression::Variable(var_name) => {
+            let variable = module.get_global(var_name.as_str()).expect("Cannot find variable");
+            Some(Box::new(variable))
+        },
+        e => Some(Box::new(BasicValueEnum::try_from(build_expr_into_const(e, builder, module)).unwrap())),
     }
 }
 
-pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Expression>, file: P) {
+fn generate_statement<'ctx>(stmt: Statement, builder: &Builder<'ctx>, module: &Module<'ctx>) {
+    match stmt {
+        Statement::Expression(expr) => {
+            generate_expression(expr, builder, module);
+        }
+        Statement::VariableDeclaration(var_name, var_value) => {
+            let context = module.get_context();
+            let i32_type = context.i32_type();
+
+            let var_global = module.add_global(i32_type, None, var_name.as_str());
+
+            builder.build_store(
+                var_global.as_pointer_value(),
+                generate_expression(var_value, builder, module)
+                    .unwrap()
+                    .as_basic_value_enum(),
+            );
+        }
+    };
+}
+
+pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
     let context = Context::create();
     let module = context.create_module("main"); // TODO: Some way to specify which module this is.
-    // Maybe it would make sense to add some modeling for what a module actually is.
+                                                // Maybe it would make sense to add some modeling for what a module actually is.
     let builder = context.create_builder();
 
     // Add in the external functions from the runtime.
@@ -60,10 +147,14 @@ pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Expression>, file: P) {
     let i32_type = context.i32_type();
 
     let print_function_signature = void_type.fn_type(&[i32_type.into()], false);
-    let external_print_function = module.add_function("rue_print", print_function_signature, Some(Linkage::AvailableExternally));
+    let _external_print_function = module.add_function(
+        "rue_print",
+        print_function_signature,
+        Some(Linkage::AvailableExternally),
+    );
 
     // TODO: For now, since we don't have a concept of function declaration, we're just going to
-    // stick everything we generate in the body of a "main" function. 
+    // stick everything we generate in the body of a "main" function.
 
     let main_function_signature = i32_type.fn_type(&[], false);
     let main_function = module.add_function("_rue_main", main_function_signature, None);
@@ -73,8 +164,8 @@ pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Expression>, file: P) {
     builder.position_at_end(basic_block);
 
     // Now we're going to generate our code inside the main funcion.
-    for expr in ast {
-        generate_expression(expr, &builder, &module);
+    for stmt in ast {
+        generate_statement(stmt, &builder, &module);
     }
 
     // To wrap up the function, we're just going to return the value we created in the
@@ -101,7 +192,9 @@ pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Expression>, file: P) {
         )
         .unwrap();
 
-    target_machine.write_to_file(&module, FileType::Object, file.as_ref()).unwrap();
+    target_machine
+        .write_to_file(&module, FileType::Object, file.as_ref())
+        .unwrap();
 
     module.print_to_stderr();
 }
@@ -118,10 +211,8 @@ pub fn link_binaries_into_archive<P: AsRef<Path> + AsRef<OsStr>>(files: Vec<P>, 
 
     // TODO: This isn't really portable, and should really be moved to some rust based implementation at some point.
     // Unfortunately, there doesn't yet exist equivalent functionality to ranlib for the rust programming language.
-    std::process::Command::new(
-        "ranlib"
-    )
-    .arg(output)
-    .status()
-    .expect("Failed to run ranlib on the archive");
+    std::process::Command::new("ranlib")
+        .arg(output)
+        .status()
+        .expect("Failed to run ranlib on the archive");
 }
