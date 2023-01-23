@@ -1,5 +1,4 @@
 #[no_mangle]
-pub unsafe extern "C" fn print(c: *const i32) {
-    let c: i32 = *c;
+pub extern "C" fn print(c: i32) {
     print!("{}", char::from(<i32 as TryInto<u8>>::try_into(c).unwrap()));
 }

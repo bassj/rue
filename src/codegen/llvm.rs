@@ -61,7 +61,7 @@ fn check_type_compatibility(lhs: BasicTypeEnum, rhs: BasicTypeEnum) {
         (BasicTypeEnum::IntType(left_int_type), BasicTypeEnum::IntType(right_int_type)) => {
             assert!(left_int_type.get_bit_width() >= right_int_type.get_bit_width(), "Right hand type cannot be contained in left hand type")
         },
-        (_, _) => panic!("Incompatible types")
+        (lhs, rhs) => panic!("Incompatible types: {:?} and {:?}", lhs, rhs)
     };
 }
 
@@ -160,13 +160,12 @@ fn generate_expression<'ctx>(
             }
         }
         Expression::Variable(var_name) => {
-            let variable = module
-                .get_global(var_name.as_str())
-                .expect("Cannot find variable");
+            let variable = *scope.find_variable(var_name)
+                .expect("Cannot find variable"); // TODO: Proper error system for these type of errors.
+            
             // TODO: At some point, we should support operators for references / dereferencing
             // For now I am just going to automatically dereference the value whenever we access a variable.
-            let var_value = builder.build_load(variable.as_pointer_value(), "temp");
-
+            let var_value = builder.build_load(variable, "temp");
             Some(Box::new(var_value))
         }
         e => Some(Box::new(
@@ -213,9 +212,11 @@ fn generate_statement<'ctx>(stmt: Statement, scope: &mut RueScope<'ctx>, builder
                 let var_global = module.add_global(var_type, None, var_name.as_str());
                 var_global.set_linkage(Linkage::External);
                 var_global.set_initializer(&var_value);
+                scope.add_variable(var_name, var_global.as_pointer_value());
             } else {
                 let var_local = builder.build_alloca(var_type, var_name.as_str());
                 builder.build_store(var_local, var_value);
+                scope.add_variable(var_name, var_local);
             }
         }
     };
@@ -237,7 +238,7 @@ pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
     let i32_type = context.i32_type();
 
     let print_function_signature =
-        void_type.fn_type(&[i32_type.ptr_type(AddressSpace::default()).into()], false);
+        void_type.fn_type(&[i32_type.into()], false);
     let _external_print_function = module.add_function(
         "print",
         print_function_signature,
