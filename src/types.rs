@@ -1,4 +1,4 @@
-use std::ops::{Add, Sub, Div, Mul};
+use std::ops::{Add, Div, Mul, Sub};
 
 const BITS_PER_BYTE: u32 = 8;
 
@@ -44,6 +44,16 @@ impl Integer for i64 {
 
     fn coerce(self) -> i128 {
         self as i128
+    }
+}
+
+impl Integer for i128 {
+    fn is_signed() -> bool {
+        true
+    }
+
+    fn coerce(self) -> i128 {
+        self
     }
 }
 
@@ -97,12 +107,32 @@ impl Integer for u128 {
     }
 }
 
-
 #[derive(Debug)]
 pub struct RueInteger {
     pub bit_width: u32,
     pub signed: bool,
     pub value: i128,
+}
+impl RueInteger {
+    /// Shrinks the bit_width to the smallest value which can still contain the stored integer.
+    /// Doesn't shrink smaller than a bit width of 32
+    pub fn shrink(mut self) -> Self {
+        let new_bit_width = match self.signed {
+            true => {
+                if self.value <= i32::MAX.into() {
+                    32
+                } else if self.value <= i64::MAX.into() {
+                    64
+                } else {
+                    128
+                }
+            }
+            false => unimplemented!(),
+        };
+
+        self.bit_width = new_bit_width;
+        self
+    }
 }
 
 impl Add for RueInteger {
@@ -179,28 +209,28 @@ impl RueValue {
     pub fn try_add(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs + rhs).into()),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
     pub fn try_sub(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs - rhs).into()),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
     pub fn try_mul(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs * rhs).into()),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
     pub fn try_div(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs / rhs).into()),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

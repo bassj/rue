@@ -49,8 +49,11 @@ pub fn parse_integer_literal(input: InputType) -> IResult<Expression> {
     nom::combinator::map_res(
         util::ws(nom::character::complete::digit1),
         |value: InputType| -> Result<Expression, Box<dyn std::error::Error>> {
-            let value = value.parse::<i64>()?;
-            Ok(Expression::Literal(RueInteger::from(value).into()))
+            let value = value.parse::<i128>()?;
+            let rue_value = RueInteger::from(value)
+                .shrink();
+
+            Ok(Expression::Literal(rue_value.into()))
         },
     )(input)
 }
