@@ -1,116 +1,17 @@
+use impls::impls;
+use num_traits::{int::PrimInt, NumCast, Signed};
 use std::ops::{Add, Div, Mul, Sub};
 
 const BITS_PER_BYTE: u32 = 8;
 
-trait Integer {
-    fn is_signed() -> bool;
-    fn coerce(self) -> i128;
-}
-
-impl Integer for i8 {
-    fn is_signed() -> bool {
-        true
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for i16 {
-    fn is_signed() -> bool {
-        true
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for i32 {
-    fn is_signed() -> bool {
-        true
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for i64 {
-    fn is_signed() -> bool {
-        true
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for i128 {
-    fn is_signed() -> bool {
-        true
-    }
-
-    fn coerce(self) -> i128 {
-        self
-    }
-}
-
-impl Integer for u8 {
-    fn is_signed() -> bool {
-        false
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for u16 {
-    fn is_signed() -> bool {
-        false
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for u32 {
-    fn is_signed() -> bool {
-        false
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for u64 {
-    fn is_signed() -> bool {
-        false
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
-impl Integer for u128 {
-    fn is_signed() -> bool {
-        false
-    }
-
-    fn coerce(self) -> i128 {
-        self as i128
-    }
-}
-
+/// Rue's representation of an integer.
 #[derive(Debug)]
 pub struct RueInteger {
+    /// The number of bits that the number type should contain
     pub bit_width: u32,
+    /// Whether the first bit of the number should represent it's sign
     pub signed: bool,
+    /// signed 128 bit representation of this integer's value.
     pub value: i128,
 }
 impl RueInteger {
@@ -183,12 +84,12 @@ impl Div for RueInteger {
     }
 }
 
-impl<T: Integer> From<T> for RueInteger {
+impl<T: PrimInt> From<T> for RueInteger {
     fn from(value: T) -> Self {
         RueInteger {
             bit_width: std::mem::size_of::<T>() as u32 * BITS_PER_BYTE,
-            signed: T::is_signed(),
-            value: value.coerce(),
+            signed: impls!(T: Signed),
+            value: NumCast::from(value).expect("unable to convert value to i128"),
         }
     }
 }
@@ -248,5 +149,114 @@ impl TryFrom<RueValue> for u64 {
         match value {
             RueValue::Integer(rue_int) => rue_int.value.try_into().map_err(|err| ()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tests the implementation of From on RueInteger over all of the rust standard integer primitive types.
+    #[test]
+    fn test_rue_integer_from_int_prims() {
+        let value = RueInteger::from(100i8);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 8,
+                signed: true,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100i16);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 16,
+                signed: true,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100i32);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 32,
+                signed: true,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100i64);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 64,
+                signed: true,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100i128);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 128,
+                signed: true,
+                value: 100
+            }
+        );
+        
+        let value = RueInteger::from(100u8);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 8,
+                signed: false,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100u16);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 16,
+                signed: false,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100u32);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 32,
+                signed: false,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100u64);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 64,
+                signed: false,
+                value: 100
+            }
+        );
+
+        let value = RueInteger::from(100u128);
+        assert_eq!(
+            value,
+            RueInteger {
+                bit_width: 128,
+                signed: false,
+                value: 100
+            }
+        );
     }
 }
