@@ -1,7 +1,8 @@
 use inkwell::{
     builder::Builder,
+    context::ContextRef,
     module::{Linkage, Module},
-    types::BasicType,
+    types::{BasicType, BasicTypeEnum},
     values::{BasicMetadataValueEnum, BasicValue},
 };
 
@@ -10,8 +11,28 @@ use crate::{
     codegen::{llvm::check_type_compatibility, RueScope},
 };
 
-use super::{llvm_type_from_type_string, IntoBasicValue};
+use super::IntoBasicValue;
 
+/// Maps rue type strings into their corresponding inkwell type
+fn llvm_type_from_type_string(type_string: String, context: ContextRef) -> BasicTypeEnum {
+    match type_string.as_str() {
+        "i8" => context.i8_type(),
+        "i16" => context.i16_type(),
+        "i32" => context.i32_type(),
+        "i64" => context.i64_type(),
+        "i128" => context.i128_type(),
+        "u8" => context.i8_type(),
+        "u16" => context.i16_type(),
+        "u32" => context.i32_type(),
+        "u64" => context.i64_type(),
+        "u128" => context.i128_type(),
+        _ => panic!("No such type"),
+    }
+    .as_basic_type_enum()
+}
+
+/// Generates the llvm IR representation of the passed rue expression. Places the IR in the module parameter.
+/// If the expression has a type other than void, this function will return a generic inkwell type representing that expression's value.
 pub fn generate_expression<'ctx>(
     expr: Expression,
     scope: &mut RueScope<'ctx>,
@@ -117,6 +138,8 @@ pub fn generate_expression<'ctx>(
     }
 }
 
+/// Genereates the llvm IR representation of the passed statment.
+/// The IR will be placed in the module parameter.
 pub fn generate_statement<'ctx>(
     stmt: Statement,
     scope: &mut RueScope<'ctx>,

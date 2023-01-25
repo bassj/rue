@@ -2,17 +2,10 @@ mod generate;
 
 use generate::*;
 
-use crate::{
-    ast::Statement,
-    types::RueValue,
-};
+use crate::{ast::Statement, types::RueValue};
 use ar;
 use inkwell::{
-    context::{Context, ContextRef},
-    module::*,
-    targets::*,
-    types::{BasicType, BasicTypeEnum},
-    values::BasicValueEnum,
+    context::Context, module::*, targets::*, types::BasicTypeEnum, values::BasicValueEnum,
     OptimizationLevel,
 };
 use std::ffi::OsStr;
@@ -21,6 +14,14 @@ use std::path::Path;
 
 use super::RueScope;
 
+/*
+ * TODO: this function should probably be a trait, like CanCoerce or Coercable, something
+ * to indicate which types a given Rue Type can be automatically converted into.
+ *
+ * Ideally this type of logic should happen in the types module. That way typechecking logic can
+ * be seperate from the codegen logic. This would enable consistent typechecking rules if some compile target
+ * other than llvm is desired.
+ */
 fn check_type_compatibility(lhs: BasicTypeEnum, rhs: BasicTypeEnum) {
     match (lhs, rhs) {
         (BasicTypeEnum::PointerType(left_ptr_type), BasicTypeEnum::PointerType(right_ptr_type)) => {
@@ -41,24 +42,8 @@ fn check_type_compatibility(lhs: BasicTypeEnum, rhs: BasicTypeEnum) {
     };
 }
 
-fn llvm_type_from_type_string(type_string: String, context: ContextRef) -> BasicTypeEnum {
-    match type_string.as_str() {
-        "i8" => context.i8_type(),
-        "i16" => context.i16_type(),
-        "i32" => context.i32_type(),
-        "i64" => context.i64_type(),
-        "i128" => context.i128_type(),
-        "u8" => context.i8_type(),
-        "u16" => context.i16_type(),
-        "u32" => context.i32_type(),
-        "u64" => context.i64_type(),
-        "u128" => context.i128_type(),
-        _ => panic!("No such type"),
-    }
-    .as_basic_type_enum()
-}
-
-pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
+/// Emits the ast paramter as an x86 object file
+pub fn emit_ast<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
     let context = Context::create();
     let module = context.create_module("main"); // TODO: Some way to specify which module this is.
                                                 // Maybe it would make sense to add some modeling for what a module actually is.
@@ -126,6 +111,8 @@ pub fn generate_binary<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
     module.print_to_stderr();
 }
 
+/// Uses the ar crate to stuff any specified binary files into an archive.
+/// Subsequently executes the "ranlib" command on the archive, which generates a symbol table.
 pub fn link_binaries_into_archive<P: AsRef<Path> + AsRef<OsStr>>(files: Vec<P>, output: P) {
     {
         let output_file = File::create(output.as_ref() as &Path).unwrap();
@@ -144,6 +131,7 @@ pub fn link_binaries_into_archive<P: AsRef<Path> + AsRef<OsStr>>(files: Vec<P>, 
         .expect("Failed to run ranlib on the archive");
 }
 
+/// Trait for converting some type into a BasicValueEnum. This is how inkwell represents an LLVM value.
 trait IntoBasicValue {
     fn into_basic_value<'ctx>(self, module: &Module<'ctx>) -> BasicValueEnum<'ctx>;
 }
@@ -179,13 +167,98 @@ impl IntoBasicValue for RueValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::RueInteger;
     use super::*;
+    use crate::types::RueInteger;
 
+    /// Tests that the implementation of IntoBasicValue for RueValue 
+    /// assigns the correct bit-width. Currently only checks signed integer types.
+    #[test]
+    fn test_into_basic_value_for_rue_value_bit_width() {
+        let context = Context::create();
+        let module = context.create_module("test");
+
+        let value = RueInteger::from(0i8);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.get_type().into_int_type().get_bit_width(),
+            8,
+            "bit width for i8 is correct"
+        );
+
+        let value = RueInteger::from(0i16);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.get_type().into_int_type().get_bit_width(),
+            16,
+            "bit width for i16 is correct"
+        );
+
+        let value = RueInteger::from(0i32);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.get_type().into_int_type().get_bit_width(),
+            32,
+            "bit width for i32 is correct"
+        );
+
+        let value = RueInteger::from(0i64);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.get_type().into_int_type().get_bit_width(),
+            64,
+            "bit width for i64 is correct"
+        );
+
+        let value = RueInteger::from(0i128);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.get_type().into_int_type().get_bit_width(),
+            128,
+            "bit width for i128 is correct"
+        );
+    }
+
+    /// Tests that the implementation of IntoBasicValue for RueValue
+    /// assigns the correct value. Currently only tests signed integers.
     #[test]
     fn test_into_basic_value_for_rue_value() {
-        // Test that the 
-        let value = 
+        let context = Context::create();
+        let module = context.create_module("test");
 
+        // Signed integer
+        let value = RueInteger::from(-12345);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.into_int_value().get_sign_extended_constant(),
+            Some(-12345),
+            "Correctly stores negative signed value"
+        );
+
+        let value = RueInteger::from(12345);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.into_int_value().get_sign_extended_constant(),
+            Some(12345),
+            "Correctly stores positive signed value"
+        );
+
+        let value = RueInteger::from(i64::MAX);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.into_int_value().get_sign_extended_constant(),
+            Some(i64::MAX),
+            "Correctly stores largest positive signed value"
+        );
+
+        let value = RueInteger::from(i64::MIN);
+        let basic_value = RueValue::from(value).into_basic_value(&module);
+        assert_eq!(
+            basic_value.into_int_value().get_sign_extended_constant(),
+            Some(i64::MIN),
+            "Correctly stores largest negative signed value"
+        );
+
+        // TODO: probably should be testing with 128 bit values, but inkwell only returns 64 bit values.
+        // Should see if there is some way to test with 128 bit values.
     }
 }
