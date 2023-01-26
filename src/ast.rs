@@ -1,5 +1,9 @@
 use crate::types::RueValue;
 
+pub struct Module {
+    pub statements: Vec<Statement>
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Statement {
     VariableDeclaration(String, Option<String>, Expression),

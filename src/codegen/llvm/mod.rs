@@ -2,7 +2,7 @@ mod generate;
 
 use generate::*;
 
-use crate::{ast::Statement, types::RueValue};
+use crate::{ast, types::RueValue};
 use ar;
 use inkwell::{
     context::Context, module::*, targets::*, types::BasicTypeEnum, values::BasicValueEnum,
@@ -43,7 +43,7 @@ fn check_type_compatibility(lhs: BasicTypeEnum, rhs: BasicTypeEnum) {
 }
 
 /// Emits the ast paramter as an x86 object file
-pub fn emit_ast<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
+pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
     let context = Context::create();
     let module = context.create_module("main"); // TODO: Some way to specify which module this is.
                                                 // Maybe it would make sense to add some modeling for what a module actually is.
@@ -76,7 +76,7 @@ pub fn emit_ast<P: AsRef<Path>>(ast: Vec<Statement>, file: P) {
     builder.position_at_end(basic_block);
 
     // Now we're going to generate our code inside the main funcion.
-    for stmt in ast {
+    for stmt in rue_module.statements {
         generate_statement(stmt, &mut global_scope, &builder, &module);
     }
 
@@ -170,7 +170,7 @@ mod tests {
     use super::*;
     use crate::types::RueInteger;
 
-    /// Tests that the implementation of IntoBasicValue for RueValue 
+    /// Tests that the implementation of IntoBasicValue for RueValue
     /// assigns the correct bit-width. Currently only checks signed integer types.
     #[test]
     fn test_into_basic_value_for_rue_value_bit_width() {

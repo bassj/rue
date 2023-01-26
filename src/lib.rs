@@ -55,7 +55,7 @@ pub fn autosource() {
     for source in sources {
         let ast = parse::parse_source(source.file_source.as_str()).unwrap();
         let obj_path = format!("{}{}.o", obj_dir, source.file_name);
-        codegen::llvm::emit_ast(ast, obj_path.as_str());
+        codegen::llvm::emit_module(ast, obj_path.as_str());
         objs.push(obj_path);
     }
 
