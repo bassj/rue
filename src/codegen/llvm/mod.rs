@@ -21,6 +21,11 @@ use super::RueScope;
  * Ideally this type of logic should happen in the types module. That way typechecking logic can
  * be seperate from the codegen logic. This would enable consistent typechecking rules if some compile target
  * other than llvm is desired.
+ * 
+ * 1/31/2023 
+ * 
+ * On second thought, I probably won't remove this type check, but I would like to make it mostly 
+ * redundant with a semantic analysis step in the rue compiler.
  */
 fn check_type_compatibility(lhs: BasicTypeEnum, rhs: BasicTypeEnum) {
     match (lhs, rhs) {

@@ -1,12 +1,18 @@
-use crate::types::RueValue;
+use crate::types::{RueType, RueValue};
 
 pub struct Module {
-    pub statements: Vec<Statement>
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
-    VariableDeclaration(String, Option<String>, Expression),
+    FunctionDeclaration {
+        function_name: String,
+        function_parameters: Vec<(String, RueType)>,
+        function_return_type: RueType,
+        is_external_function: bool,
+    },
+    VariableDeclaration(String, Option<RueType>, Expression),
     Expression(Expression),
 }
 
@@ -36,9 +42,7 @@ impl Expression {
             Self::BinaryOperation(op, lhs, rhs) => {
                 evaulate_expression(Expression::BinaryOperation(op, lhs, rhs))
             }
-            Self::Literal(rue_val) => {
-                rue_val
-            }
+            Self::Literal(rue_val) => rue_val,
             _ => panic!("Attempting to compute constant from non-constant value"),
         }
     }
@@ -103,10 +107,18 @@ fn evaulate_expression(expr: Expression) -> RueValue {
 
             // TODO: proper type error system
             match op {
-                Operator::Add => RueValue::try_add(lhs, rhs).expect("Type error trying to operate on values"),
-                Operator::Subtract => RueValue::try_sub(lhs, rhs).expect("Type error trying to operate on values"),
-                Operator::Multiply => RueValue::try_mul(lhs, rhs).expect("Type error trying to operate on values"),
-                Operator::Divide => RueValue::try_div(lhs, rhs).expect("Type error trying to operate on values"),
+                Operator::Add => {
+                    RueValue::try_add(lhs, rhs).expect("Type error trying to operate on values")
+                }
+                Operator::Subtract => {
+                    RueValue::try_sub(lhs, rhs).expect("Type error trying to operate on values")
+                }
+                Operator::Multiply => {
+                    RueValue::try_mul(lhs, rhs).expect("Type error trying to operate on values")
+                }
+                Operator::Divide => {
+                    RueValue::try_div(lhs, rhs).expect("Type error trying to operate on values")
+                }
             }
         }
         _ => unimplemented!(),

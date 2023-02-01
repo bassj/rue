@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::Pointer};
+use std::collections::HashMap;
 
-use inkwell::values::{BasicValueEnum, PointerValue};
+use inkwell::values::PointerValue;
 
 pub mod llvm;
 

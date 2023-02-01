@@ -1,3 +1,5 @@
+use crate::types::RueType;
+
 use super::InputType;
 use nom::{error::ParseError, IResult, Parser};
 
@@ -19,10 +21,18 @@ where
     nom::sequence::delimited(eat_whitespace, f, eat_whitespace)
 }
 
+// list of keywords
+// let, fn, extern
+
 fn parse_keyword(input: InputType) -> crate::parse::IResult<String> {
-    nom::combinator::map(nom::bytes::complete::tag("let"), |tag: InputType| {
-        tag.fragment().to_string()
-    })(input)
+    nom::combinator::map(
+        nom::branch::alt((
+            nom::bytes::complete::tag("let"),
+            nom::bytes::complete::tag("fn"),
+            nom::bytes::complete::tag("extern"),
+        )),
+        |tag: InputType| tag.fragment().to_string(),
+    )(input)
 }
 
 pub fn parse_identifier(input: InputType) -> crate::parse::IResult<String> {
@@ -40,13 +50,18 @@ pub fn parse_identifier(input: InputType) -> crate::parse::IResult<String> {
     Ok((input, function_name))
 }
 
-pub fn parse_type_tag(input: InputType) -> crate::parse::IResult<String> {
-    let (input, type_name) = nom::sequence::preceded(
-        ws(nom::bytes::complete::tag(":")),
-        ws(parse_identifier),
-    )(input)?;
+pub fn parse_type(input: InputType) -> crate::parse::IResult<RueType> {
+    nom::combinator::map(ws(parse_identifier), |type_name| {
+        RueType::from(type_name.as_str())
+    })(input)
+}
 
-    Ok((input, type_name))
+// TODO: Implement and use a proper type parser.
+pub fn parse_type_tag(input: InputType) -> crate::parse::IResult<RueType> {
+    let (input, rue_type) =
+        nom::sequence::preceded(ws(nom::bytes::complete::tag(":")), parse_type)(input)?;
+
+    Ok((input, rue_type))
 }
 
 #[cfg(test)]

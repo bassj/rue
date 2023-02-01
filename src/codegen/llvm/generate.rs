@@ -9,26 +9,30 @@ use inkwell::{
 use crate::{
     ast::{Expression, Operator, Statement},
     codegen::{llvm::check_type_compatibility, RueScope},
+    types::RueType,
 };
 
 use super::IntoBasicValue;
 
 /// Maps rue type strings into their corresponding inkwell type
-fn llvm_type_from_type_string(type_string: String, context: ContextRef) -> BasicTypeEnum {
-    match type_string.as_str() {
-        "i8" => context.i8_type(),
-        "i16" => context.i16_type(),
-        "i32" => context.i32_type(),
-        "i64" => context.i64_type(),
-        "i128" => context.i128_type(),
-        "u8" => context.i8_type(),
-        "u16" => context.i16_type(),
-        "u32" => context.i32_type(),
-        "u64" => context.i64_type(),
-        "u128" => context.i128_type(),
-        _ => panic!("No such type"),
+fn llvm_type_from_rue_type(rue_type: RueType, context: ContextRef) -> BasicTypeEnum {
+    match rue_type {
+        RueType::Integer { bit_width, signed } => match (bit_width, signed) {
+            (8, true) => context.i8_type(),
+            (16, true) => context.i16_type(),
+            (32, true) => context.i32_type(),
+            (64, true) => context.i64_type(),
+            (128, true) => context.i128_type(),
+            (8, false) => context.i8_type(),
+            (16, false) => context.i16_type(),
+            (32, false) => context.i32_type(),
+            (64, false) => context.i64_type(),
+            (128, false) => context.i128_type(),
+            _ => unimplemented!(),
+        }
+        .into(),
+        _ => unimplemented!(),
     }
-    .as_basic_type_enum()
 }
 
 /// Generates the llvm IR representation of the passed rue expression. Places the IR in the module parameter.
@@ -156,10 +160,9 @@ pub fn generate_statement<'ctx>(
                 .unwrap()
                 .as_basic_value_enum();
 
-            let var_type = if let Some(var_type) = var_type {
-                llvm_type_from_type_string(var_type, context)
-            } else {
-                var_value.get_type()
+            let var_type = match var_type {
+                Some(var_type) => llvm_type_from_rue_type(var_type, context),
+                None => var_value.get_type(),
             };
 
             if scope.is_global {
@@ -173,5 +176,11 @@ pub fn generate_statement<'ctx>(
                 scope.add_variable(var_name, var_local);
             }
         }
+        Statement::FunctionDeclaration {
+            function_name,
+            function_parameters,
+            function_return_type,
+            is_external_function,
+        } => unimplemented!(),
     };
 }

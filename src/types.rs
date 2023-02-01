@@ -4,6 +4,78 @@ use std::ops::{Add, Div, Mul, Sub};
 
 const BITS_PER_BYTE: u32 = 8;
 
+#[derive(Debug, PartialEq)]
+pub enum RueType {
+    Integer { bit_width: u32, signed: bool },
+    Implicit,
+    Void,
+}
+
+impl From<&str> for RueType {
+    fn from(value: &str) -> Self {
+        match value {
+            "i8" => RueType::Integer {
+                bit_width: 8,
+                signed: true,
+            },
+            "i16" => RueType::Integer {
+                bit_width: 16,
+                signed: true,
+            },
+            "i32" => RueType::Integer {
+                bit_width: 32,
+                signed: true,
+            },
+            "i64" => RueType::Integer {
+                bit_width: 64,
+                signed: true,
+            },
+            "i128" => RueType::Integer {
+                bit_width: 128,
+                signed: true,
+            },
+            "u8" => RueType::Integer {
+                bit_width: 8,
+                signed: false,
+            },
+            "u16" => RueType::Integer {
+                bit_width: 16,
+                signed: false,
+            },
+            "u32" => RueType::Integer {
+                bit_width: 32,
+                signed: false,
+            },
+            "u64" => RueType::Integer {
+                bit_width: 64,
+                signed: false,
+            },
+            "u128" => RueType::Integer {
+                bit_width: 128,
+                signed: false,
+            },
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl From<&RueInteger> for RueType {
+    fn from(value: &RueInteger) -> Self {
+        RueType::Integer {
+            bit_width: value.bit_width,
+            signed: value.signed,
+        }
+    }
+}
+
+impl From<&RueValue> for RueType {
+    fn from(value: &RueValue) -> Self {
+        match value {
+            RueValue::Integer(int_value) => RueType::from(int_value),
+        }
+    }
+}
+
 /// Rue's representation of an integer.
 #[derive(Debug)]
 pub struct RueInteger {
@@ -28,7 +100,15 @@ impl RueInteger {
                     128
                 }
             }
-            false => unimplemented!(),
+            false => {
+                if self.value <= u32::MAX.into() {
+                    32
+                } else if self.value <= u64::MAX.into() {
+                    64
+                } else {
+                    128
+                }
+            }
         };
 
         self.bit_width = new_bit_width;
@@ -102,6 +182,9 @@ impl PartialEq for RueInteger {
 
 type RueTypeError = ();
 
+// I have a thought that this type could simply be a RueType and a vector of bytes / u128.
+// Need to think through how that might affect things. I kinda like using the rust type system
+// To represent rue types. It makes some guarantees at the cost of flexibility.
 #[derive(Debug, PartialEq)]
 pub enum RueValue {
     Integer(RueInteger),
@@ -208,7 +291,7 @@ mod tests {
                 value: 100
             }
         );
-        
+
         let value = RueInteger::from(100u8);
         assert_eq!(
             value,
