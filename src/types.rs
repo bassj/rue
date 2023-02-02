@@ -191,6 +191,7 @@ pub enum RueValue {
 }
 impl RueValue {
     pub fn try_add(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
+        #[allow(unreachable_patterns)]
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs + rhs).into()),
             _ => Err(()),
@@ -198,6 +199,7 @@ impl RueValue {
     }
 
     pub fn try_sub(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
+        #[allow(unreachable_patterns)]
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs - rhs).into()),
             _ => Err(()),
@@ -205,6 +207,7 @@ impl RueValue {
     }
 
     pub fn try_mul(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
+        #[allow(unreachable_patterns)]
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs * rhs).into()),
             _ => Err(()),
@@ -212,6 +215,7 @@ impl RueValue {
     }
 
     pub fn try_div(lhs: Self, rhs: Self) -> Result<Self, RueTypeError> {
+        #[allow(unreachable_patterns)]
         match (lhs, rhs) {
             (RueValue::Integer(lhs), RueValue::Integer(rhs)) => Ok((lhs / rhs).into()),
             _ => Err(()),
@@ -230,7 +234,7 @@ impl TryFrom<RueValue> for u64 {
 
     fn try_from(value: RueValue) -> Result<Self, Self::Error> {
         match value {
-            RueValue::Integer(rue_int) => rue_int.value.try_into().map_err(|err| ()),
+            RueValue::Integer(rue_int) => rue_int.value.try_into().map_err(|_err| ()),
         }
     }
 }

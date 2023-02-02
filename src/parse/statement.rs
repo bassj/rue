@@ -17,6 +17,7 @@ pub fn parse_statement(input: InputType) -> IResult<Statement> {
                 (Statement::Expression(expr), err_stack)
             }),
             parse_variable_declaration,
+            parse_function_declaration,
         ))),
         nom::branch::alt((nom::character::complete::line_ending, nom::combinator::eof)),
     )(input);
@@ -42,7 +43,9 @@ fn parse_variable_declaration(input: InputType) -> IResult<(Statement, ErrorStac
     Ok((input, (stmt, error_stack)))
 }
 
-fn parse_function_declaration(input: InputType) -> IResult<Statement> {
+// TODO: probably move this to the func parse module, then just call it from parse_statement
+// TODO #2: when declaring external functions, we probably don't actually need to include the param names
+fn parse_function_declaration(input: InputType) -> IResult<(Statement, ErrorStack)> {
     let (input, (is_extern, _, function_name, function_parameters, return_type)) =
         nom::sequence::tuple((
             nom::combinator::opt(ws(nom::bytes::complete::tag("extern"))),
@@ -74,7 +77,9 @@ fn parse_function_declaration(input: InputType) -> IResult<Statement> {
         is_external_function,
     };
 
-    Ok((input, stmt))
+    let error_stack = Vec::new();
+
+    Ok((input, (stmt, error_stack)))
 }
 
 #[cfg(test)]
@@ -95,7 +100,7 @@ mod tests {
             message: &str,
         ) {
             let input = LocatedSpan::new(input);
-            let (input, stmt) = parse_function_declaration(input).unwrap();
+            let (input, (stmt, _error_stack)) = parse_function_declaration(input).unwrap();
 
             assert_eq!(
                 input.fragment(),
@@ -110,9 +115,6 @@ mod tests {
             );
         }
 
-        // TODO: This is ambiguous with a function call, need to add a test case
-        // for parse_statement so that we don't accidentally parse an expression when we mean
-        // to parse a function declaration.
         _test_parse_function_declaration(
             "fn test()",
             "",

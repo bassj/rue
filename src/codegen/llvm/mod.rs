@@ -60,15 +60,15 @@ pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
     // TODO: The rue programming language should probably have some way to import
     // modules, which would determine what external functions we need to be aware of.
 
-    let void_type = context.void_type();
     let i32_type = context.i32_type();
 
-    let print_function_signature = void_type.fn_type(&[i32_type.into()], false);
-    let _external_print_function = module.add_function(
-        "print",
-        print_function_signature,
-        Some(Linkage::AvailableExternally),
-    );
+    // we should now have the ability to do this within rue
+    // let print_function_signature = void_type.fn_type(&[i32_type.into()], false);
+    // let _external_print_function = module.add_function(
+    //     "print",
+    //     print_function_signature,
+    //     Some(Linkage::AvailableExternally),
+    // );
 
     // TODO: For now, since we don't have a concept of function declaration, we're just going to
     // stick everything we generate in the body of a "main" function.
@@ -145,6 +145,7 @@ impl IntoBasicValue for RueValue {
     fn into_basic_value<'ctx>(self, module: &Module<'ctx>) -> BasicValueEnum<'ctx> {
         let context = module.get_context();
 
+        #[allow(unreachable_patterns)]
         match self {
             RueValue::Integer(int_val) => {
                 let const_type = match int_val.bit_width {

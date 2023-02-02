@@ -2,7 +2,7 @@ use inkwell::{
     builder::Builder,
     context::ContextRef,
     module::{Linkage, Module},
-    types::{BasicType, BasicTypeEnum},
+    types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
     values::{BasicMetadataValueEnum, BasicValue},
 };
 
@@ -14,8 +14,11 @@ use crate::{
 
 use super::IntoBasicValue;
 
-/// Maps rue type strings into their corresponding inkwell type
-fn llvm_type_from_rue_type(rue_type: RueType, context: ContextRef) -> BasicTypeEnum {
+/// Maps rue types into their corresponding inkwell type
+fn llvm_type_from_rue_type<'ctx>(
+    rue_type: RueType,
+    context: &ContextRef<'ctx>,
+) -> AnyTypeEnum<'ctx> {
     match rue_type {
         RueType::Integer { bit_width, signed } => match (bit_width, signed) {
             (8, true) => context.i8_type(),
@@ -28,10 +31,15 @@ fn llvm_type_from_rue_type(rue_type: RueType, context: ContextRef) -> BasicTypeE
             (32, false) => context.i32_type(),
             (64, false) => context.i64_type(),
             (128, false) => context.i128_type(),
-            _ => unimplemented!(),
+            _ => unimplemented!(
+                "Unable to convert int into llvm type: signed: {} bit_width: {}",
+                signed,
+                bit_width
+            ),
         }
         .into(),
-        _ => unimplemented!(),
+        RueType::Void => context.void_type().into(),
+        t => todo!("convert {:#?} into llvm type", t),
     }
 }
 
@@ -161,7 +169,7 @@ pub fn generate_statement<'ctx>(
                 .as_basic_value_enum();
 
             let var_type = match var_type {
-                Some(var_type) => llvm_type_from_rue_type(var_type, context),
+                Some(var_type) => llvm_type_from_rue_type(var_type, &context).try_into().expect("Failed to convert any type into basic type value, probably should replace this with a real error sometime."),
                 None => var_value.get_type(),
             };
 
@@ -181,6 +189,36 @@ pub fn generate_statement<'ctx>(
             function_parameters,
             function_return_type,
             is_external_function,
-        } => unimplemented!(),
+        } => {
+            let context = module.get_context();
+
+            let param_types: Vec<BasicMetadataTypeEnum> = function_parameters
+                .into_iter()
+                .map(|(_param_name, param_type)| {
+                    llvm_type_from_rue_type(param_type, &context)
+                        .try_into()
+                        .unwrap()
+                })
+                .collect();
+
+            let return_type =
+                llvm_type_from_rue_type(function_return_type, &context);
+
+            let func_signature = if return_type.is_void_type() {
+                let return_type = return_type.into_void_type();
+                return_type.fn_type(param_types.as_slice(), false)
+            } else {
+                let return_type: BasicTypeEnum = return_type.try_into().unwrap();
+                return_type.fn_type(param_types.as_slice(), false)
+            };
+
+            let func_linkage = if is_external_function {
+                Some(Linkage::AvailableExternally)
+            } else {
+                todo!("Implement non-external function declarations")
+            };
+
+            module.add_function(function_name.as_str(), func_signature, func_linkage);
+        }
     };
 }
