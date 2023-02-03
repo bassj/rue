@@ -1,5 +1,8 @@
 extern fn print(val: i32)
+
 let test = 67
 let test2 = 69
 print(test)
 print(test2)
+
+

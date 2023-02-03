@@ -11,7 +11,8 @@ use super::util::parse_type_tag;
 use super::util::ws;
 
 pub fn parse_statement(input: InputType) -> IResult<Statement> {
-    let t = nom_preserve::sequence::terminated(
+    let t = nom_preserve::sequence::delimited(
+        nom::character::complete::multispace0,
         nom_preserve::error::blame(nom::branch::alt((
             nom::combinator::map(super::expr::parse_expression, |(expr, err_stack)| {
                 (Statement::Expression(expr), err_stack)
@@ -19,7 +20,13 @@ pub fn parse_statement(input: InputType) -> IResult<Statement> {
             parse_variable_declaration,
             parse_function_declaration,
         ))),
-        nom::branch::alt((nom::character::complete::line_ending, nom::combinator::eof)),
+        nom::branch::alt((
+            nom::sequence::terminated(
+                nom::character::complete::line_ending,
+                nom::character::complete::multispace0,
+            ),
+            nom::combinator::eof,
+        )),
     )(input);
 
     t.map(|(i, (expr, _err_stack))| (i, expr))
@@ -136,7 +143,7 @@ mod tests {
                 function_return_type: RueType::Void,
                 is_external_function: true,
             },
-            "Test parse simple external function"
+            "Test parse simple external function",
         );
 
         _test_parse_function_declaration(
@@ -157,7 +164,7 @@ mod tests {
                 },
                 is_external_function: false,
             },
-            "Test parse function with argument and return type"
+            "Test parse function with argument and return type",
         );
 
         // TODO: later
