@@ -8,7 +8,7 @@ const BITS_PER_BYTE: u32 = 8;
 pub enum RueType {
     Integer { bit_width: u32, signed: bool },
     Implicit,
-    Void,
+    Unit,
 }
 
 impl From<&str> for RueType {

@@ -38,7 +38,7 @@ fn llvm_type_from_rue_type<'ctx>(
             ),
         }
         .into(),
-        RueType::Void => context.void_type().into(),
+        RueType::Unit => context.void_type().into(),
         t => todo!("convert {:#?} into llvm type", t),
     }
 }

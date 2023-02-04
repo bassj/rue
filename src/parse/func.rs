@@ -47,7 +47,7 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
 
         let function_return_type = match return_type {
             Some(return_type) => return_type,
-            None => RueType::Void,
+            None => RueType::Unit,
         };
 
         let stmt = Statement::FunctionDeclaration {
@@ -82,7 +82,7 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
 
         let function_return_type = match return_type {
             Some(return_type) => return_type,
-            None => RueType::Void,
+            None => RueType::Unit,
         };
 
         let stmt = Statement::FunctionDeclaration {
@@ -144,7 +144,7 @@ mod tests {
             Statement::FunctionDeclaration {
                 function_name: "test".to_string(),
                 function_parameters: Vec::new(),
-                function_return_type: RueType::Void,
+                function_return_type: RueType::Unit,
                 is_external_function: false,
             },
             "Test parse simple function",
@@ -156,7 +156,7 @@ mod tests {
             Statement::FunctionDeclaration {
                 function_name: "test".to_string(),
                 function_parameters: Vec::new(),
-                function_return_type: RueType::Void,
+                function_return_type: RueType::Unit,
                 is_external_function: true,
             },
             "Test parse simple external function",
@@ -183,7 +183,7 @@ mod tests {
                         },
                     ),
                 ],
-                function_return_type: RueType::Void,
+                function_return_type: RueType::Unit,
                 is_external_function: true,
             },
             "Test parse external function with parameters",
@@ -210,7 +210,7 @@ mod tests {
                         },
                     ),
                 ],
-                function_return_type: RueType::Void,
+                function_return_type: RueType::Unit,
                 is_external_function: true,
             },
             "Test parse external function with named parameters",
