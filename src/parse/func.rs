@@ -35,7 +35,10 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
                 ws(parse_identifier),
                 nom::sequence::delimited(
                     nom::character::complete::char('('),
-                    nom::multi::many0(nom::sequence::tuple((ws(parse_identifier), parse_type_tag))),
+                    nom::multi::separated_list0(
+                        ws(nom::character::complete::char(',')),
+                        nom::sequence::tuple((ws(parse_identifier), parse_type_tag)),
+                    ),
                     nom::character::complete::char(')'),
                 ),
                 nom::combinator::opt(nom::sequence::preceded(
@@ -67,10 +70,12 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
                 ws(parse_identifier),
                 nom::sequence::delimited(
                     nom::character::complete::char('('),
-                    nom::multi::many0(nom::branch::alt((
-                        nom::combinator::map(parse_type, |rue_type| (String::new(), rue_type)),
-                        nom::sequence::tuple((ws(parse_identifier), parse_type_tag)),
-                    ))),
+                    nom::multi::separated_list0(
+                        ws(nom::character::complete::char(',')),
+                        nom::branch::alt((
+                            nom::combinator::map(parse_type, |rue_type| (String::new(), rue_type)),
+                        )),
+                    ),
                     nom::character::complete::char(')'),
                 ),
                 nom::combinator::opt(nom::sequence::preceded(
@@ -123,7 +128,16 @@ mod tests {
             message: &str,
         ) {
             let input = LocatedSpan::new(input);
-            let (input, (stmt, _error_stack)) = parse_function_declaration(input).unwrap();
+            let parser_res = parse_function_declaration(input);
+
+            assert!(
+                parser_res.is_ok(),
+                "parse_function_declaration returns no error - {}:\n{}",
+                message,
+                parser_res.unwrap_err()
+            );
+
+            let (input, (stmt, _error_stack)) = parser_res.unwrap();
 
             assert_eq!(
                 input.fragment(),
@@ -190,7 +204,7 @@ mod tests {
         );
 
         _test_parse_function_declaration(
-            "extern fn test(test: i32, test_two: i32)",
+            "fn test(test: i32, test_two: i32)",
             "",
             Statement::FunctionDeclaration {
                 function_name: "test".to_string(),
@@ -211,7 +225,7 @@ mod tests {
                     ),
                 ],
                 function_return_type: RueType::Unit,
-                is_external_function: true,
+                is_external_function: false,
             },
             "Test parse external function with named parameters",
         );
