@@ -1,6 +1,13 @@
-use crate::ast::Expression;
+use crate::{
+    ast::{Expression, Statement},
+    types::RueType,
+};
 
-use super::{IResult, InputType, util};
+use super::{
+    error::ErrorStack,
+    util::{self, parse_identifier, parse_type, parse_type_tag, ws},
+    IResult, InputType,
+};
 
 fn parse_function_arguments(input: InputType) -> IResult<Vec<Expression>> {
     nom::sequence::delimited(
@@ -20,15 +27,241 @@ pub fn parse_function_invocation(input: InputType) -> IResult<Expression> {
     )(input)
 }
 
+pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, ErrorStack)> {
+    fn _parse_function_declaration(input: InputType) -> IResult<Statement> {
+        let (input, (_, function_name, function_parameters, return_type)) =
+            nom::sequence::tuple((
+                ws(nom::bytes::complete::tag("fn")),
+                ws(parse_identifier),
+                nom::sequence::delimited(
+                    nom::character::complete::char('('),
+                    nom::multi::many0(nom::sequence::tuple((ws(parse_identifier), parse_type_tag))),
+                    nom::character::complete::char(')'),
+                ),
+                nom::combinator::opt(nom::sequence::preceded(
+                    // TODO: probably refactor this into a parse function return type tag
+                    ws(nom::bytes::complete::tag("->")),
+                    parse_type,
+                )),
+            ))(input)?;
+
+        let function_return_type = match return_type {
+            Some(return_type) => return_type,
+            None => RueType::Void,
+        };
+
+        let stmt = Statement::FunctionDeclaration {
+            function_name,
+            function_parameters,
+            function_return_type,
+            is_external_function: false,
+        };
+
+        Ok((input, stmt))
+    }
+
+    fn _parse_external_function_declaration(input: InputType) -> IResult<Statement> {
+        let (input, (_, function_name, function_parameters, return_type)) =
+            nom::sequence::tuple((
+                ws(nom::bytes::complete::tag("fn")),
+                ws(parse_identifier),
+                nom::sequence::delimited(
+                    nom::character::complete::char('('),
+                    nom::multi::many0(nom::branch::alt((
+                        nom::combinator::map(parse_type, |rue_type| (String::new(), rue_type)),
+                        nom::sequence::tuple((ws(parse_identifier), parse_type_tag)),
+                    ))),
+                    nom::character::complete::char(')'),
+                ),
+                nom::combinator::opt(nom::sequence::preceded(
+                    // TODO: probably refactor this into a parse function return type tag
+                    ws(nom::bytes::complete::tag("->")),
+                    parse_type,
+                )),
+            ))(input)?;
+
+        let function_return_type = match return_type {
+            Some(return_type) => return_type,
+            None => RueType::Void,
+        };
+
+        let stmt = Statement::FunctionDeclaration {
+            function_name,
+            function_parameters,
+            function_return_type,
+            is_external_function: true,
+        };
+
+        Ok((input, stmt))
+    }
+
+    let (input, is_extern) = nom::combinator::opt(ws(nom::bytes::complete::tag("extern")))(input)?;
+
+    let error_stack = Vec::new();
+
+    let (input, stmt) = if is_extern.is_some() {
+        _parse_external_function_declaration(input)?
+    } else {
+        _parse_function_declaration(input)?
+    };
+
+    Ok((input, (stmt, error_stack)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::RueInteger;
+    use crate::{ast::Statement, types::RueInteger};
     use nom_locate::LocatedSpan;
 
     #[test]
-    fn test_parse_function_arguments() {
+    fn test_parse_function_declaration() {
+        fn _test_parse_function_declaration(
+            input: &str,
+            expected_output_str: &str,
+            expected_output: Statement,
+            message: &str,
+        ) {
+            let input = LocatedSpan::new(input);
+            let (input, (stmt, _error_stack)) = parse_function_declaration(input).unwrap();
 
+            assert_eq!(
+                input.fragment(),
+                &expected_output_str,
+                "parse_function_declaration returns correct input - {}",
+                message
+            );
+            assert_eq!(
+                stmt, expected_output,
+                "parse_function_declaration returns correct statement - {}",
+                message
+            );
+        }
+
+        _test_parse_function_declaration(
+            "fn test()",
+            "",
+            Statement::FunctionDeclaration {
+                function_name: "test".to_string(),
+                function_parameters: Vec::new(),
+                function_return_type: RueType::Void,
+                is_external_function: false,
+            },
+            "Test parse simple function",
+        );
+
+        _test_parse_function_declaration(
+            "extern fn test()",
+            "",
+            Statement::FunctionDeclaration {
+                function_name: "test".to_string(),
+                function_parameters: Vec::new(),
+                function_return_type: RueType::Void,
+                is_external_function: true,
+            },
+            "Test parse simple external function",
+        );
+
+        _test_parse_function_declaration(
+            "extern fn test(i32, i32)",
+            "",
+            Statement::FunctionDeclaration {
+                function_name: "test".to_string(),
+                function_parameters: vec![
+                    (
+                        "".to_string(),
+                        RueType::Integer {
+                            bit_width: 32,
+                            signed: true,
+                        },
+                    ),
+                    (
+                        "".to_string(),
+                        RueType::Integer {
+                            bit_width: 32,
+                            signed: true,
+                        },
+                    ),
+                ],
+                function_return_type: RueType::Void,
+                is_external_function: true,
+            },
+            "Test parse external function with parameters",
+        );
+
+        _test_parse_function_declaration(
+            "extern fn test(test: i32, test_two: i32)",
+            "",
+            Statement::FunctionDeclaration {
+                function_name: "test".to_string(),
+                function_parameters: vec![
+                    (
+                        "test".to_string(),
+                        RueType::Integer {
+                            bit_width: 32,
+                            signed: true,
+                        },
+                    ),
+                    (
+                        "test_two".to_string(),
+                        RueType::Integer {
+                            bit_width: 32,
+                            signed: true,
+                        },
+                    ),
+                ],
+                function_return_type: RueType::Void,
+                is_external_function: true,
+            },
+            "Test parse external function with named parameters",
+        );
+
+        _test_parse_function_declaration(
+            "fn test(test_param: i32) -> i32",
+            "",
+            Statement::FunctionDeclaration {
+                function_name: "test".to_string(),
+                function_parameters: vec![(
+                    "test_param".to_string(),
+                    RueType::Integer {
+                        bit_width: 32,
+                        signed: true,
+                    },
+                )],
+                function_return_type: RueType::Integer {
+                    bit_width: 32,
+                    signed: true,
+                },
+                is_external_function: false,
+            },
+            "Test parse function with argument and return type",
+        );
+
+        // TODO: later
+        // _test_parse_function_declaration(
+        //     "fn test(test_param: i32, test_param2: i32)",
+        //     "",
+        //     Statement::FunctionDeclaration {
+        //         function_name: "test".to_string(),
+        //         function_parameters: vec![(
+        //             "test_param".to_string(),
+        //             RueType::Integer {
+        //                 bit_width: 32,
+        //                 signed: true,
+        //             },
+        //         )],
+        //         function_return_type: RueType::Integer {
+        //             bit_width: 32,
+        //             signed: true,
+        //         },
+        //         is_external_function: false,
+        //     },
+        //     "Test parse function with multiple arguments"
+        // );
+    }
+
+    #[test]
+    fn test_parse_function_arguments() {
         let input = LocatedSpan::new("()");
         let (input, func_args) = parse_function_arguments(input).unwrap();
 
