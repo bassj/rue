@@ -22,6 +22,9 @@ pub enum Expression {
     Literal(RueValue),
     Variable(String),
     BinaryOperation(Operator, Box<Expression>, Box<Expression>),
+    CodeBlock {
+        statements: Vec<Statement>,
+    },
     NoOp,
 }
 impl Expression {

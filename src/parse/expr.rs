@@ -5,7 +5,14 @@ use std::{cell::RefCell, rc::Rc};
 
 use nom::Parser;
 
-use super::{atom, error::ErrorStack, func, util, IResult, InputType};
+use super::{
+    atom,
+    error::ErrorStack,
+    func,
+    statement::parse_statement,
+    util::{self, ws_and_newline},
+    IResult, InputType,
+};
 
 use crate::ast::*;
 
@@ -62,6 +69,7 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
                         }),
                         func::parse_function_invocation,
                         atom::parse_variable_get,
+                        parse_code_block,
                     ))(input)
                 }
             };
@@ -113,15 +121,43 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
     res.map(|(i, expr)| (i, (expr, error_stack)))
 }
 
+pub fn parse_code_block(input: InputType) -> IResult<Expression> {
+    let (input, statements) = nom::sequence::delimited(
+        ws_and_newline(nom::character::complete::char('{')),
+        nom::multi::many0(parse_statement),
+        ws_and_newline(nom::character::complete::char('}')),
+    )(input)?;
+
+    Ok((input, Expression::CodeBlock { statements }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::RueInteger;
+    use nom_locate::LocatedSpan;
+
+    #[test]
+    pub fn test_parse_code_block() {
+        let input = LocatedSpan::new("{\ntest_function()\n}");
+        let (input, expr) = parse_code_block(input).unwrap();
+
+        assert_eq!(input.fragment(), &"", "Parser returns correct input");
+
+        assert_eq!(
+            expr,
+            Expression::CodeBlock {
+                statements: vec![Statement::Expression(Expression::FunctionInvocation(
+                    String::from("test_function"),
+                    Vec::new()
+                ))]
+            },
+            "parse_code_block parses correct code block"
+        );
+    }
 
     #[test]
     pub fn test_parse_expression_function_invocation() {
-        use nom_locate::LocatedSpan;
-
         let input = LocatedSpan::new("test_function()");
         let (input, (expr, _error_stack)) = parse_expression(input).unwrap();
 

@@ -21,6 +21,19 @@ where
     nom::sequence::delimited(eat_whitespace, f, eat_whitespace)
 }
 
+pub fn ws_and_newline<'p, O, E: ParseError<InputType<'p>>, F>(
+    f: F,
+) -> impl FnMut(InputType<'p>) -> IResult<InputType<'p>, O, E>
+where
+    F: Parser<InputType<'p>, O, E>,
+{
+    nom::sequence::delimited(
+        nom::character::complete::multispace0,
+        f,
+        nom::character::complete::multispace0,
+    )
+}
+
 // list of keywords
 // let, fn, extern
 
