@@ -1,4 +1,4 @@
-extern fn print(val: i32)
+extern fn print(i32)
 
 let test = 67
 let test2 = 69

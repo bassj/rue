@@ -21,16 +21,11 @@ fn llvm_type_from_rue_type<'ctx>(
 ) -> AnyTypeEnum<'ctx> {
     match rue_type {
         RueType::Integer { bit_width, signed } => match (bit_width, signed) {
-            (8, true) => context.i8_type(),
-            (16, true) => context.i16_type(),
-            (32, true) => context.i32_type(),
-            (64, true) => context.i64_type(),
-            (128, true) => context.i128_type(),
-            (8, false) => context.i8_type(),
-            (16, false) => context.i16_type(),
-            (32, false) => context.i32_type(),
-            (64, false) => context.i64_type(),
-            (128, false) => context.i128_type(),
+            (8,   _)  => context.i8_type(),
+            (16,  _)  => context.i16_type(),
+            (32,  _)  => context.i32_type(),
+            (64,  _)  => context.i64_type(),
+            (128, _)  => context.i128_type(),
             _ => unimplemented!(
                 "Unable to convert int into llvm type: signed: {} bit_width: {}",
                 signed,
@@ -91,6 +86,7 @@ pub fn generate_expression<'ctx>(
 
             if let Some(left) = builder
                 .build_call(func_val, arg_values.as_slice(), func_name.as_str())
+                .unwrap()
                 .try_as_basic_value()
                 .left()
             {
@@ -118,17 +114,23 @@ pub fn generate_expression<'ctx>(
                             .into_int_value();
 
                         let op_val = match op {
-                            Operator::Add => builder.build_int_add(lhs, rhs, "integer addition"),
+                            Operator::Add => {
+                                builder.build_int_add(lhs, rhs, "integer addition")
+                                    .unwrap()
+                            },
                             Operator::Subtract => {
                                 builder.build_int_sub(lhs, rhs, "integer subtraction")
+                                    .unwrap()
                             }
 
                             Operator::Divide => {
                                 builder.build_int_signed_div(lhs, rhs, "integer division")
+                                    .unwrap()
                             }
 
                             Operator::Multiply => {
                                 builder.build_int_mul(lhs, rhs, "integer multiplication")
+                                    .unwrap()
                             }
                         };
 
@@ -143,7 +145,11 @@ pub fn generate_expression<'ctx>(
 
             // TODO: At some point, we should support operators for references / dereferencing
             // For now I am just going to automatically dereference the value whenever we access a variable.
-            let var_value = builder.build_load(variable, "temp");
+
+            // TODO: There needs to be some way to know what type we are dereferencing into
+            let t = module.get_context().i32_type();
+            let var_value = builder.build_load(t, variable, "temp")
+                .expect("Failed to build load instruction");
             Some(Box::new(var_value))
         }
         e => Some(Box::new(e.compute_value().into_basic_value(module))),
@@ -179,8 +185,10 @@ pub fn generate_statement<'ctx>(
                 var_global.set_initializer(&var_value);
                 scope.add_variable(var_name, var_global.as_pointer_value());
             } else {
-                let var_local = builder.build_alloca(var_type, var_name.as_str());
-                builder.build_store(var_local, var_value);
+                let var_local = builder.build_alloca(var_type, var_name.as_str())
+                    .expect("Failed to build alloca");
+                builder.build_store(var_local, var_value)
+                    .unwrap();
                 scope.add_variable(var_name, var_local);
             }
         }
