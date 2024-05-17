@@ -13,7 +13,7 @@ nom_locate = "4.2.0"
 nom_preserve = { version = "0.1.0", git = "https://github.com/bassj/nom_preserve" }
 colored = "2.0.4"
 itertools = "0.11"
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm16-0"] }
+inkwell = { version = "0.4.0", features = ["llvm16-0"] }
 ar = "0.9.0"
 num-traits = "0.2.0"
 impls = "1.0"
