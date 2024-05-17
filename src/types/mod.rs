@@ -7,7 +7,9 @@ pub use integer::RueInteger;
 #[derive(Debug, PartialEq)]
 pub enum RueType {
     Integer { bit_width: u32, signed: bool },
+    /// The implicit type, isn't really a type, it just means "Try and figure out what type i mean at compile time" 
     Implicit,
+    /// The unit type is meant to be like rust's unit type, similar to a void type in other languages.
     Unit,
 }
 

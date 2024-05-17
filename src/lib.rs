@@ -13,6 +13,7 @@ struct ModuleSource {
     file_source: String,
 }
 
+/// Automatically collects rue source files from ./src, links them into an archive and adds that archive to the current cargo build
 pub fn autosource() {
     fn _scan_for_sources<P: AsRef<Path>>(path: P) -> Vec<ModuleSource> {
         let mut sources = Vec::new();

@@ -48,7 +48,7 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
 
         move |input: InputType<'p>| -> IResult<'p, Expression> {
             let operators = if precedence_level < num_precedence_levels {
-                Some(precedence_levels[precedence_level].clone())
+                Some(precedence_levels[precedence_level])
             } else {
                 None
             };
