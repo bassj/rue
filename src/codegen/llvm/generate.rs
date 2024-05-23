@@ -7,12 +7,10 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Expression, Operator, Statement},
-    codegen::{llvm::check_type_compatibility, RueScope},
-    types::RueType,
+    ast::{Expression, Operator, Statement}, codegen::llvm::check_type_compatibility, types::RueType
 };
 
-use super::IntoBasicValue;
+use super::{scope, IntoBasicValue};
 
 /// Maps rue types into their corresponding inkwell type
 fn llvm_type_from_rue_type<'ctx>(
@@ -21,11 +19,11 @@ fn llvm_type_from_rue_type<'ctx>(
 ) -> AnyTypeEnum<'ctx> {
     match rue_type {
         RueType::Integer { bit_width, signed } => match (bit_width, signed) {
-            (8,   _)  => context.i8_type(),
-            (16,  _)  => context.i16_type(),
-            (32,  _)  => context.i32_type(),
-            (64,  _)  => context.i64_type(),
-            (128, _)  => context.i128_type(),
+            (8, _) => context.i8_type(),
+            (16, _) => context.i16_type(),
+            (32, _) => context.i32_type(),
+            (64, _) => context.i64_type(),
+            (128, _) => context.i128_type(),
             _ => unimplemented!(
                 "Unable to convert int into llvm type: signed: {} bit_width: {}",
                 signed,
@@ -42,7 +40,7 @@ fn llvm_type_from_rue_type<'ctx>(
 /// If the expression has a type other than void, this function will return a generic inkwell type representing that expression's value.
 pub fn generate_expression<'ctx>(
     expr: Expression,
-    scope: &mut RueScope<'ctx>,
+    scope: &mut scope::Scope<'ctx>,
     builder: &Builder<'ctx>,
     module: &Module<'ctx>,
 ) -> Option<Box<dyn BasicValue<'ctx> + 'ctx>> {
@@ -115,23 +113,19 @@ pub fn generate_expression<'ctx>(
 
                         let op_val = match op {
                             Operator::Add => {
-                                builder.build_int_add(lhs, rhs, "integer addition")
-                                    .unwrap()
-                            },
-                            Operator::Subtract => {
-                                builder.build_int_sub(lhs, rhs, "integer subtraction")
-                                    .unwrap()
+                                builder.build_int_add(lhs, rhs, "integer addition").unwrap()
                             }
+                            Operator::Subtract => builder
+                                .build_int_sub(lhs, rhs, "integer subtraction")
+                                .unwrap(),
 
-                            Operator::Divide => {
-                                builder.build_int_signed_div(lhs, rhs, "integer division")
-                                    .unwrap()
-                            }
+                            Operator::Divide => builder
+                                .build_int_signed_div(lhs, rhs, "integer division")
+                                .unwrap(),
 
-                            Operator::Multiply => {
-                                builder.build_int_mul(lhs, rhs, "integer multiplication")
-                                    .unwrap()
-                            }
+                            Operator::Multiply => builder
+                                .build_int_mul(lhs, rhs, "integer multiplication")
+                                .unwrap(),
                         };
 
                         Some(Box::new(op_val.as_basic_value_enum()))
@@ -141,14 +135,15 @@ pub fn generate_expression<'ctx>(
             }
         }
         Expression::Variable(var_name) => {
-            let variable = *scope.find_variable(var_name).expect("Cannot find variable"); // TODO: Proper error system for these type of errors.
+            let variable = scope.find_variable(&var_name).expect("Cannot find variable"); // TODO: Proper error system for these type of errors.
 
             // TODO: At some point, we should support operators for references / dereferencing
             // For now I am just going to automatically dereference the value whenever we access a variable.
 
             // TODO: There needs to be some way to know what type we are dereferencing into
             let t = module.get_context().i32_type();
-            let var_value = builder.build_load(t, variable, "temp")
+            let var_value = builder
+                .build_load(t, variable, "temp")
                 .expect("Failed to build load instruction");
             Some(Box::new(var_value))
         }
@@ -160,7 +155,7 @@ pub fn generate_expression<'ctx>(
 /// The IR will be placed in the module parameter.
 pub fn generate_statement<'ctx>(
     stmt: Statement,
-    scope: &mut RueScope<'ctx>,
+    scope: &mut scope::Scope<'ctx>,
     builder: &Builder<'ctx>,
     module: &Module<'ctx>,
 ) {
@@ -179,18 +174,11 @@ pub fn generate_statement<'ctx>(
                 None => var_value.get_type(),
             };
 
-            if scope.is_global {
-                let var_global = module.add_global(var_type, None, var_name.as_str());
-                var_global.set_linkage(Linkage::External);
-                var_global.set_initializer(&var_value);
-                scope.add_variable(var_name, var_global.as_pointer_value());
-            } else {
-                let var_local = builder.build_alloca(var_type, var_name.as_str())
+            let var_local = builder
+                .build_alloca(var_type, var_name.as_str())
                     .expect("Failed to build alloca");
-                builder.build_store(var_local, var_value)
-                    .unwrap();
-                scope.add_variable(var_name, var_local);
-            }
+            builder.build_store(var_local, var_value).unwrap();
+            scope.add_variable(&var_name, var_local);
         }
         Statement::FunctionDeclaration {
             function_name,

@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::path::Path;
 
-use super::RueScope;
+pub mod scope;
 
 /*
  * TODO: this function should probably be a trait, like CanCoerce or Coercable, something
@@ -54,7 +54,7 @@ pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
                                                 // Maybe it would make sense to add some modeling for what a module actually is.
     let builder = context.create_builder();
 
-    let mut global_scope = RueScope::global();
+    let mut scope_graph = scope::ScopeGraph::new();
 
     // Add in the external functions from the runtime.
     // TODO: The rue programming language should probably have some way to import
@@ -82,7 +82,7 @@ pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
 
     // Now we're going to generate our code inside the main funcion.
     for stmt in rue_module.statements {
-        generate_statement(stmt, &mut global_scope, &builder, &module);
+        generate_statement(stmt, &mut scope_graph.root_scope, &builder, &module);
     }
 
     // To wrap up the function, we're just going to return the value we created in the
