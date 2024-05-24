@@ -35,7 +35,7 @@ where
 }
 
 // list of keywords
-// let, fn, extern
+// let, fn, extern, return
 
 fn parse_keyword(input: InputType) -> crate::parse::IResult<String> {
     nom::combinator::map(
@@ -43,6 +43,7 @@ fn parse_keyword(input: InputType) -> crate::parse::IResult<String> {
             nom::bytes::complete::tag("let"),
             nom::bytes::complete::tag("fn"),
             nom::bytes::complete::tag("extern"),
+            nom::bytes::complete::tag("return"),
         )),
         |tag: InputType| tag.fragment().to_string(),
     )(input)
@@ -75,6 +76,29 @@ pub fn parse_type_tag(input: InputType) -> crate::parse::IResult<RueType> {
         nom::sequence::preceded(ws(nom::bytes::complete::tag(":")), parse_type)(input)?;
 
     Ok((input, rue_type))
+}
+
+pub fn _debug_parser<'p, R, F: Fn(InputType<'p>) -> crate::parse::IResult<R>>(
+    parser: F,
+    message: &'static str,
+) -> impl Fn(InputType<'p>) -> crate::parse::IResult<R> {
+    #[cfg(debug_assertions)]
+    {
+        return move |input: InputType<'p>| {
+            let res = parser(input);
+            match &res {
+                Ok(_) => println!("{} - success", message),
+                Err(_) => println!("{} - error", message),
+            }
+
+            res
+        };
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        return parser;
+    }
 }
 
 #[cfg(test)]

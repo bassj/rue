@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use inkwell::values::PointerValue;
+use inkwell::values::{BasicValueEnum, PointerValue};
 
 pub struct ScopeGraph<'ctx> {
     pub root_scope: Scope<'ctx>,
@@ -22,7 +22,7 @@ impl<'ctx> ScopeGraph<'ctx> {
 pub struct Scope<'ctx> {
     parent_scope: Option<*const Scope<'ctx>>,
     sub_scopes: Vec<Scope<'ctx>>,
-    scope_variables: HashMap<String, PointerValue<'ctx>>,
+    scope_variables: HashMap<String, BasicValueEnum<'ctx>>,
 }
 
 impl<'ctx> Scope<'ctx> {
@@ -37,7 +37,7 @@ impl<'ctx> Scope<'ctx> {
         self.sub_scopes.last_mut().unwrap()
     }
 
-    pub fn find_variable(&self, variable_name: &str) -> Option<PointerValue<'ctx>> {
+    pub fn find_variable(&self, variable_name: &str) -> Option<BasicValueEnum<'ctx>> {
         if !self.scope_variables.contains_key(variable_name) {
             match self.parent_scope {
                 Some(parent_scope) => unsafe {
@@ -49,29 +49,34 @@ impl<'ctx> Scope<'ctx> {
                 None => None,
             }
         } else {
-            let pointer_value = self.scope_variables.get(variable_name).unwrap();
-            Some(*pointer_value)
+            let value = self.scope_variables.get(variable_name).unwrap();
+            Some(*value)
         }
     }
 
-    pub fn add_variable(&mut self, variable_name: &str, value: PointerValue<'ctx>) {
+    pub fn add_variable(&mut self, variable_name: &str, value: BasicValueEnum<'ctx>) {
         self.scope_variables
             .insert(variable_name.to_string(), value);
+    }
+
+    pub fn is_root_scope(&self) -> bool {
+        self.parent_scope.is_none()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use llvm_sys_160::prelude::LLVMValueRef;
     use crate::codegen::llvm::scope::ScopeGraph;
     use inkwell::values::PointerValue;
+    use llvm_sys_160::prelude::LLVMValueRef;
 
     #[test]
     fn test_find_variable() {
-
         let mut scope_graph = ScopeGraph::new();
 
-        let dummy_value = unsafe { PointerValue::new(1 as LLVMValueRef) };
+        let dummy_value = unsafe {
+            inkwell::values::BasicValueEnum::PointerValue(PointerValue::new(1 as LLVMValueRef))
+        };
 
         scope_graph.root_scope.add_variable("root_var", dummy_value);
 
@@ -86,8 +91,14 @@ mod tests {
         }
 
         assert!(scope_graph.root_scope.find_variable("root_var").is_some());
-        assert!(scope_graph.root_scope.find_variable("scope_a_var").is_none());
-        assert!(scope_graph.root_scope.find_variable("scope_b_var").is_none());
+        assert!(scope_graph
+            .root_scope
+            .find_variable("scope_a_var")
+            .is_none());
+        assert!(scope_graph
+            .root_scope
+            .find_variable("scope_b_var")
+            .is_none());
 
         {
             let scope_a = &scope_graph.root_scope.sub_scopes[0];

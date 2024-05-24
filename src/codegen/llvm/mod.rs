@@ -51,16 +51,12 @@ fn check_type_compatibility(lhs: BasicTypeEnum, rhs: BasicTypeEnum) {
 pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
     let context = Context::create();
     let module = context.create_module("main"); // TODO: Some way to specify which module this is.
-                                                // Maybe it would make sense to add some modeling for what a module actually is.
     let builder = context.create_builder();
 
     let mut scope_graph = scope::ScopeGraph::new();
 
-    // Add in the external functions from the runtime.
     // TODO: The rue programming language should probably have some way to import
     // modules, which would determine what external functions we need to be aware of.
-
-    let i32_type = context.i32_type();
 
     // we should now have the ability to do this within rue
     // let print_function_signature = void_type.fn_type(&[i32_type.into()], false);
@@ -73,12 +69,12 @@ pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
     // TODO: For now, since we don't have a concept of function declaration, we're just going to
     // stick everything we generate in the body of a "main" function.
 
-    let main_function_signature = i32_type.fn_type(&[], false);
-    let main_function = module.add_function("_rue_main", main_function_signature, None);
-    let basic_block = context.append_basic_block(main_function, "entry");
-    let int_constant = i32_type.const_int(0, false);
+    // let main_function_signature = i32_type.fn_type(&[], false);
+    // let main_function = module.add_function("_rue_main", main_function_signature, None);
+    // let basic_block = context.append_basic_block(main_function, "entry");
+    // let int_constant = i32_type.const_int(0, false);
 
-    builder.position_at_end(basic_block);
+    // builder.position_at_end(basic_block);
 
     // Now we're going to generate our code inside the main funcion.
     for stmt in rue_module.statements {
@@ -88,8 +84,8 @@ pub fn emit_module<P: AsRef<Path>>(rue_module: ast::Module, file: P) {
     // To wrap up the function, we're just going to return the value we created in the
     // int_constant variable above
 
-    builder.build_return(Some(&int_constant))
-        .unwrap();
+   /*  builder.build_return(Some(&int_constant))
+        .unwrap() */;
 
     // Now actually write the binary.
     Target::initialize_all(&InitializationConfig::default());

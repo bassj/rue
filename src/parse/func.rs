@@ -1,5 +1,6 @@
 use crate::{
     ast::{Expression, Statement},
+    parse,
     types::RueType,
 };
 
@@ -27,30 +28,38 @@ pub fn parse_function_invocation(input: InputType) -> IResult<Expression> {
     )(input)
 }
 
+fn _parse_function_return_type(input: InputType) -> IResult<Option<RueType>> {
+    nom::combinator::opt(nom::sequence::preceded(
+        ws(nom::bytes::complete::tag("->")),
+        parse_type,
+    ))(input)
+}
+
+fn _parse_function_args_list(input: InputType) -> IResult<Vec<(String, RueType)>> {
+    nom::sequence::delimited(
+        nom::character::complete::char('('),
+        nom::multi::separated_list0(
+            ws(nom::character::complete::char(',')),
+            nom::sequence::tuple((ws(parse_identifier), parse_type_tag)),
+        ),
+        nom::character::complete::char(')'),
+    )(input)
+}
+
 pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, ErrorStack)> {
     fn _parse_function_declaration(input: InputType) -> IResult<Statement> {
-        let (input, (_, function_name, function_parameters, return_type)) =
+        let (input, (_, function_name, function_parameters, return_type, body)) =
             nom::sequence::tuple((
                 ws(nom::bytes::complete::tag("fn")),
                 ws(parse_identifier),
-                nom::sequence::delimited(
-                    nom::character::complete::char('('),
-                    nom::multi::separated_list0(
-                        ws(nom::character::complete::char(',')),
-                        nom::sequence::tuple((ws(parse_identifier), parse_type_tag)),
-                    ),
-                    nom::character::complete::char(')'),
-                ),
-                nom::combinator::opt(nom::sequence::preceded(
-                    // TODO: probably refactor this into a parse function return type tag
-                    ws(nom::bytes::complete::tag("->")),
-                    parse_type,
-                )),
+                _parse_function_args_list,
+                _parse_function_return_type,
+                parse::expr::parse_code_block,
             ))(input)?;
 
         let function_return_type = match return_type {
             Some(return_type) => return_type,
-            None => RueType::Unit,
+            None => RueType::Implicit,
         };
 
         let stmt = Statement::FunctionDeclaration {
@@ -58,6 +67,7 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
             function_parameters,
             function_return_type,
             is_external_function: false,
+            body: Some(body),
         };
 
         Ok((input, stmt))
@@ -72,9 +82,9 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
                     nom::character::complete::char('('),
                     nom::multi::separated_list0(
                         ws(nom::character::complete::char(',')),
-                        nom::branch::alt((
-                            nom::combinator::map(parse_type, |rue_type| (String::new(), rue_type)),
-                        )),
+                        nom::branch::alt((nom::combinator::map(parse_type, |rue_type| {
+                            (String::new(), rue_type)
+                        }),)),
                     ),
                     nom::character::complete::char(')'),
                 ),
@@ -95,6 +105,7 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
             function_parameters,
             function_return_type,
             is_external_function: true,
+            body: None,
         };
 
         Ok((input, stmt))
@@ -116,7 +127,10 @@ pub fn parse_function_declaration(input: InputType) -> IResult<(Statement, Error
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ast::Statement, types::RueInteger};
+    use crate::{
+        ast::{CodeBlock, Operator, Statement},
+        types::RueInteger,
+    };
     use nom_locate::LocatedSpan;
 
     #[test]
@@ -132,7 +146,7 @@ mod tests {
 
             assert!(
                 parser_res.is_ok(),
-                "parse_function_declaration returns no error - {}:\n{}",
+                "parse_function_declaration returns no error - {}:\n{:?}",
                 message,
                 parser_res.unwrap_err()
             );
@@ -153,13 +167,14 @@ mod tests {
         }
 
         _test_parse_function_declaration(
-            "fn test()",
+            "fn test() {}",
             "",
             Statement::FunctionDeclaration {
                 function_name: "test".to_string(),
                 function_parameters: Vec::new(),
-                function_return_type: RueType::Unit,
+                function_return_type: RueType::Implicit,
                 is_external_function: false,
+                body: Some(CodeBlock { statements: vec![] }),
             },
             "Test parse simple function",
         );
@@ -172,6 +187,7 @@ mod tests {
                 function_parameters: Vec::new(),
                 function_return_type: RueType::Unit,
                 is_external_function: true,
+                body: None,
             },
             "Test parse simple external function",
         );
@@ -184,94 +200,88 @@ mod tests {
                 function_parameters: vec![
                     (
                         "".to_string(),
-                        RueType::Integer {
-                            bit_width: 32,
-                            signed: true,
-                        },
+                        RueType::I32,
                     ),
                     (
                         "".to_string(),
-                        RueType::Integer {
-                            bit_width: 32,
-                            signed: true,
-                        },
+                        RueType::I32,
                     ),
                 ],
                 function_return_type: RueType::Unit,
                 is_external_function: true,
+                body: None,
             },
             "Test parse external function with parameters",
         );
 
-        _test_parse_function_declaration(
-            "fn test(test: i32, test_two: i32)",
+        /*_test_parse_function_declaration(
+            "extern fn test(test: i32, test_two: i32)",
             "",
             Statement::FunctionDeclaration {
                 function_name: "test".to_string(),
                 function_parameters: vec![
                     (
                         "test".to_string(),
-                        RueType::Integer {
-                            bit_width: 32,
-                            signed: true,
-                        },
+                        RueType::I32,
                     ),
                     (
                         "test_two".to_string(),
-                        RueType::Integer {
-                            bit_width: 32,
-                            signed: true,
-                        },
+                        RueType::I32,
                     ),
                 ],
                 function_return_type: RueType::Unit,
                 is_external_function: false,
+                body: Some(CodeBlock { statements: vec![] }),
             },
-            "Test parse external function with named parameters",
-        );
+            "Test parse function with named parameters",
+        ); */
 
         _test_parse_function_declaration(
-            "fn test(test_param: i32) -> i32",
+            "fn test(test_param: i32) -> i32 {}",
             "",
             Statement::FunctionDeclaration {
                 function_name: "test".to_string(),
                 function_parameters: vec![(
                     "test_param".to_string(),
-                    RueType::Integer {
-                        bit_width: 32,
-                        signed: true,
-                    },
+                    RueType::I32,
                 )],
-                function_return_type: RueType::Integer {
-                    bit_width: 32,
-                    signed: true,
-                },
+                function_return_type: RueType::I32,
                 is_external_function: false,
+                body: Some(CodeBlock { statements: vec![] }),
             },
             "Test parse function with argument and return type",
         );
 
-        // TODO: later
-        // _test_parse_function_declaration(
-        //     "fn test(test_param: i32, test_param2: i32)",
-        //     "",
-        //     Statement::FunctionDeclaration {
-        //         function_name: "test".to_string(),
-        //         function_parameters: vec![(
-        //             "test_param".to_string(),
-        //             RueType::Integer {
-        //                 bit_width: 32,
-        //                 signed: true,
-        //             },
-        //         )],
-        //         function_return_type: RueType::Integer {
-        //             bit_width: 32,
-        //             signed: true,
-        //         },
-        //         is_external_function: false,
-        //     },
-        //     "Test parse function with multiple arguments"
-        // );
+        _test_parse_function_declaration(
+            r#"fn test(a: i32, b: i32) -> i32 {
+                return a + b
+            }"#,
+            "",
+            Statement::FunctionDeclaration {
+                function_name: "test".to_string(),
+                function_parameters: vec![
+                    (
+                        "a".to_string(),
+                        RueType::I32,
+                    ),
+                    (
+                        "b".to_string(),
+                        RueType::I32,
+                    ),
+                ],
+                function_return_type: RueType::I32,
+                is_external_function: false,
+                body: Some(CodeBlock {
+                    statements: vec![Statement::Return(Expression::BinaryOperation(
+                        Operator::Add,
+                        Box::new(Expression::Variable("a".to_string())),
+                        Box::new(Expression::Variable("b".to_string())),
+                    ))],
+                }),
+            },
+            "Test parse function with body",
+        );
+
     }
 
     #[test]

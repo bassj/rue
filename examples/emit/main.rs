@@ -6,6 +6,7 @@ fn main() {
     let ast = match rue::parse::parse_source(rue_source) {
         Ok(ast) => ast,
         Err(e) => {
+            println!("{:?}", e);
             panic!("{}", e)
         }
     };

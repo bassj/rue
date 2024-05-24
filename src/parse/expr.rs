@@ -68,8 +68,8 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
                             expr
                         }),
                         func::parse_function_invocation,
-                        atom::parse_variable_get,
-                        parse_code_block,
+                        atom::parse_variable_get
+                        // parse_code_block, TODO see parse_code_block_as_expression
                     ))(input)
                 }
             };
@@ -121,14 +121,24 @@ fn parse_binary_operation_or_term<'p>(input: InputType) -> IResult<(Expression, 
     res.map(|(i, expr)| (i, (expr, error_stack)))
 }
 
-pub fn parse_code_block(input: InputType) -> IResult<Expression> {
+pub fn parse_code_block(input: InputType) -> IResult<CodeBlock> {
     let (input, statements) = nom::sequence::delimited(
         ws_and_newline(nom::character::complete::char('{')),
         nom::multi::many0(parse_statement),
         ws_and_newline(nom::character::complete::char('}')),
     )(input)?;
 
-    Ok((input, Expression::CodeBlock { statements }))
+    let code_block = CodeBlock {
+        statements,
+    };
+
+    Ok((input, code_block))
+}
+
+// TODO: I kinda want rue to have code blocks as expressions like rust does, but for now I don't want to make things more complicated
+// by giving them a return type and not using it.
+pub fn parse_code_block_as_expression(input: InputType) -> IResult<Expression> {
+    todo!()
 }
 
 #[cfg(test)]
@@ -139,18 +149,20 @@ mod tests {
 
     #[test]
     pub fn test_parse_code_block() {
-        let input = LocatedSpan::new("{\ntest_function()\n}");
+        let input = LocatedSpan::new(r#"{
+            test_function()
+        }"#);
         let (input, expr) = parse_code_block(input).unwrap();
 
         assert_eq!(input.fragment(), &"", "Parser returns correct input");
 
         assert_eq!(
             expr,
-            Expression::CodeBlock {
+            CodeBlock {
                 statements: vec![Statement::Expression(Expression::FunctionInvocation(
                     String::from("test_function"),
                     Vec::new()
-                ))]
+                ))],
             },
             "parse_code_block parses correct code block"
         );

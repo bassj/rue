@@ -1,6 +1,12 @@
 use crate::types::{RueType, RueValue};
 
+#[derive(Debug, PartialEq)]
 pub struct Module {
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CodeBlock {
     pub statements: Vec<Statement>,
 }
 
@@ -11,9 +17,11 @@ pub enum Statement {
         function_parameters: Vec<(String, RueType)>,
         function_return_type: RueType,
         is_external_function: bool,
+        body: Option<CodeBlock>,
     },
     VariableDeclaration(String, Option<RueType>, Expression),
     Expression(Expression),
+    Return(Expression),
 }
 
 #[derive(Debug, PartialEq)]
@@ -22,9 +30,7 @@ pub enum Expression {
     Literal(RueValue),
     Variable(String),
     BinaryOperation(Operator, Box<Expression>, Box<Expression>),
-    CodeBlock {
-        statements: Vec<Statement>,
-    },
+    CodeBlock(CodeBlock),
     NoOp,
 }
 impl Expression {

@@ -1,8 +1,10 @@
 extern fn print(i32)
 
-let test = 67
-let test2 = 69
-print(test)
-print(test2)
+fn test_func(a: i32, b: i32) -> i32 {
+    return a + b
+}
 
-
+fn _rue_main() -> i32 {
+    print(test_func(35, 32))
+    return 0
+}

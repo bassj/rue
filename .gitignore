@@ -4,3 +4,4 @@
 *.a
 cargo-test-*
 test.*
+.vscode/

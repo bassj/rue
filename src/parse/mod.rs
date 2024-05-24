@@ -32,3 +32,68 @@ pub fn parse_source<'s, T: Into<&'s str>>(input: T) -> Result<Module, ParseError
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{ast::{CodeBlock, Expression, Module, Operator, Statement}, parse::parse_source, types::RueType};
+
+    fn _test_parse_source(input: &str, expected_output: Module, message: &str) {
+        let parser_res = parse_source(input);
+
+        assert!(
+            parser_res.is_ok(),
+            "parse_source returns no error - {}:\n{}",
+            message,
+            parser_res.unwrap_err()
+        );
+
+        let module = parser_res.unwrap();
+
+        assert_eq!(
+            module, expected_output,
+            "parse_source returns correct module - {}",
+            message
+        );
+    }
+
+    #[test]
+    fn test_parse_source() {
+        _test_parse_source(
+            r#"
+            extern fn print(i32)
+
+            fn test_func(a: i32, b: i32) -> i32 {
+                return a + b
+            }
+        "#,
+            Module {
+                statements: vec![
+                    Statement::FunctionDeclaration {
+                        function_name: "print".to_string(),
+                        function_parameters: vec![("".to_string(), RueType::I32)],
+                        function_return_type: RueType::Unit,
+                        is_external_function: true,
+                        body: None,
+                    },
+                    Statement::FunctionDeclaration {
+                        function_name: "test_func".to_string(),
+                        function_parameters: vec![
+                            ("a".to_string(), RueType::I32),
+                            ("b".to_string(), RueType::I32),
+                        ],
+                        function_return_type: RueType::I32,
+                        is_external_function: false,
+                        body: Some(CodeBlock {
+                            statements: vec![Statement::Return(Expression::BinaryOperation(
+                                Operator::Add,
+                                Box::new(Expression::Variable("a".to_string())),
+                                Box::new(Expression::Variable("b".to_string())),
+                            ))],
+                        }),
+                    },
+                ],
+            },
+            "Parse multiple function declarations",
+        );
+    }
+}

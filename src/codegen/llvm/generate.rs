@@ -7,7 +7,9 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Expression, Operator, Statement}, codegen::llvm::check_type_compatibility, types::RueType
+    ast::{Expression, Operator, Statement},
+    codegen::llvm::check_type_compatibility,
+    types::RueType,
 };
 
 use super::{scope, IntoBasicValue};
@@ -135,17 +137,23 @@ pub fn generate_expression<'ctx>(
             }
         }
         Expression::Variable(var_name) => {
-            let variable = scope.find_variable(&var_name).expect("Cannot find variable"); // TODO: Proper error system for these type of errors.
+            let variable = scope
+                .find_variable(&var_name)
+                .expect("Cannot find variable"); // TODO: Proper error system for these type of errors.
 
-            // TODO: At some point, we should support operators for references / dereferencing
-            // For now I am just going to automatically dereference the value whenever we access a variable.
+            if variable.is_pointer_value() {
+                // TODO: At some point, the programmer should be able to decide whether we want the value referenced by the
+                // point or the value of the pointer itself.
 
-            // TODO: There needs to be some way to know what type we are dereferencing into
-            let t = module.get_context().i32_type();
-            let var_value = builder
-                .build_load(t, variable, "temp")
-                .expect("Failed to build load instruction");
-            Some(Box::new(var_value))
+                // TODO: There needs to be some way to know what type we are dereferencing into
+                let t = module.get_context().i32_type();
+                let var_value = builder
+                    .build_load(t, variable.into_pointer_value(), "temp")
+                    .expect("Failed to build load instruction");
+                return Some(Box::new(var_value));
+            }
+
+            Some(Box::new(variable))
         }
         e => Some(Box::new(e.compute_value().into_basic_value(module))),
     }
@@ -176,29 +184,34 @@ pub fn generate_statement<'ctx>(
 
             let var_local = builder
                 .build_alloca(var_type, var_name.as_str())
-                    .expect("Failed to build alloca");
+                .expect("Failed to build alloca");
             builder.build_store(var_local, var_value).unwrap();
-            scope.add_variable(&var_name, var_local);
+            scope.add_variable(
+                &var_name,
+                inkwell::values::BasicValueEnum::PointerValue(var_local),
+            );
         }
         Statement::FunctionDeclaration {
             function_name,
             function_parameters,
             function_return_type,
             is_external_function,
+            body,
         } => {
             let context = module.get_context();
 
+            let mut param_names: Vec<String> = Vec::with_capacity(function_parameters.len());
             let param_types: Vec<BasicMetadataTypeEnum> = function_parameters
                 .into_iter()
-                .map(|(_param_name, param_type)| {
+                .map(|(param_name, param_type)| {
+                    param_names.push(param_name);
                     llvm_type_from_rue_type(param_type, &context)
                         .try_into()
                         .unwrap()
                 })
                 .collect();
 
-            let return_type =
-                llvm_type_from_rue_type(function_return_type, &context);
+            let return_type = llvm_type_from_rue_type(function_return_type, &context);
 
             let func_signature = if return_type.is_void_type() {
                 let return_type = return_type.into_void_type();
@@ -211,10 +224,54 @@ pub fn generate_statement<'ctx>(
             let func_linkage = if is_external_function {
                 Some(Linkage::AvailableExternally)
             } else {
-                todo!("Implement non-external function declarations")
+                Some(Linkage::External) // TODO: maybe we don't want functions to be available externally by default, then we should use private
             };
 
-            module.add_function(function_name.as_str(), func_signature, func_linkage);
+            let function_val =
+                module.add_function(function_name.as_str(), func_signature, func_linkage);
+
+            if !is_external_function {
+                let Some(body) = body else {
+                    // TODO: handle the error more gracefully.
+                    panic!(
+                        "Error generating {} - Expected function body, but didn't get one",
+                        function_name
+                    );
+                };
+
+                let body_scope = scope.new_sub_scope();
+
+                let mut index = 0;
+                for param in function_val.get_param_iter() {
+                    let param_name = &param_names[index];
+                    body_scope.add_variable(param_name, param);
+                    index += 1;
+                }
+
+                let function_body = context.append_basic_block(function_val, "body");
+                builder.position_at_end(function_body);
+
+                for statement in body.statements {
+                    // TODO: probably shouldn't support nested functions yet?
+                    // So this should be generate_function_body_statement or something?
+                    generate_statement(statement, body_scope, builder, module);
+                }
+            }
+        }
+        Statement::Return(returned_expr) => {
+            // TODO: probably gonna have to put the function body inside the function declaration.
+            // Then I can have a separate function that takes reference to the function return type
+            // so that it can be when doing codegen for the statement. Eventaully this should return an
+            // error instead of just dying.
+            if scope.is_root_scope() {
+                panic!("Can't have a return statement outside of a function");
+            }
+
+            match generate_expression(returned_expr, scope, builder, module) {
+                Some(returned_expr) => builder.build_return(Some(returned_expr.as_ref())),
+                None => builder.build_return(None),
+            }
+            .unwrap();
         }
     };
 }
